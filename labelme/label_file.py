@@ -33,8 +33,16 @@ class LabelFile(object):
 
     @staticmethod
     def load_image_file(filename):
+#        # from read() - labelImg.py
+#        try:
+#            with open(filename, 'rb') as f:
+#                return f.read()
+#        except:
+#            return None
         try:
-            image_pil = PIL.Image.open(filename)
+            with open(filename, 'rb') as f:
+#               image_pil = PIL.Image.open(filename)
+                image_pil = f.read()
         except IOError:
             logger.error('Failed opening image file: {}'.format(filename))
             return
@@ -42,17 +50,18 @@ class LabelFile(object):
         # apply orientation to image according to exif
         image_pil = utils.apply_exif_orientation(image_pil)
 
-        with io.BytesIO() as f:
-            ext = osp.splitext(filename)[1].lower()
-            if PY2 and QT4:
-                format = 'PNG'
-            elif ext in ['.jpg', '.jpeg']:
-                format = 'JPEG'
-            else:
-                format = 'PNG'
-            image_pil.save(f, format=format)
-            f.seek(0)
-            return f.read()
+#        with io.BytesIO() as f:
+#            ext = osp.splitext(filename)[1].lower()
+#            if PY2 and QT4:
+#                format = 'PNG'
+#            elif ext in ['.jpg', '.jpeg']:
+#                format = 'JPEG'
+#            else:
+#                format = 'PNG'
+#            image_pil.save(f, format=format)
+#            f.seek(0)
+#            return f.read()
+        return image_pil
 
     def load(self, filename):
         keys = [
