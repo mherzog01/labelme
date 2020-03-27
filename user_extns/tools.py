@@ -1,0 +1,237 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Feb 18 10:44:36 2020
+
+@author: MHerzo
+"""
+
+import labelme
+from labelme import user_extns
+from labelme.shape import Shape
+
+import os
+import os.path as osp
+
+from qtpy import QtCore, QtWidgets, QtGui
+from qtpy.QtWidgets import QWidget
+from qtpy.QtWidgets import QInputDialog
+from PyQt5.QtCore import QCoreApplication
+
+from PyQt5.QtWidgets import QApplication
+
+import sys
+import glob
+
+import tempfile
+import shutil
+
+# https://www.sqlitetutorial.net/sqlite-python/sqlite-python-select/
+import sqlite3
+from sqlite3 import Error
+
+import PIL 
+from PIL import Image
+
+
+dev_db=r'c:\tmp\work1\images.db3'
+prod_db=r'C:\Runtime\Tissue_Image_Collection\Data\images.db3'
+if os.path.isfile(prod_db):
+    DB_FILE=prod_db
+else:
+    DB_FILE=dev_db
+    
+
+#https://www.tutorialspoint.com/pyqt/pyqt_qinputdialog_widget.htm
+class inputdialog(QWidget):
+   def __init__(self, msg, title='Enter Information', parent = None, default_value=None):
+      super(inputdialog, self).__init__(parent)
+		
+      self.show()
+      
+      text, ok = QInputDialog.getText(self, title, msg, text=default_value)
+      
+		
+      if ok:
+          self.value = text
+      else:
+          self.value = None
+
+            
+            
+def imgFileToLabelFileName(img_file, label_dir=None):
+    label_file = osp.splitext(img_file)[0] + '.json'
+    if label_dir:
+        label_file_without_path = osp.basename(label_file)
+        label_file = osp.join(label_dir, label_file_without_path)
+    return label_file
+
+# If more options are needed, set exec=False and use returned object to do needed config
+def dispMsgBox(msg, title=None, icon=None, exec=True):
+    msgBox = QtWidgets.QMessageBox()
+    msgBox.setText(msg)
+    msgBox.setWindowTitle(title)
+    if icon == "Critical":
+        msgBox.setIcon(msgBox.Critical)
+    elif icon == "Question":
+        msgBox.setIcon(msgBox.Question)
+    elif icon == "Warning":
+        msgBox.setIcon(msgBox.Warning)
+    elif icon == "Information":
+        msgBox.setIcon(msgBox.Information)
+    if exec:
+        msgBox.exec();
+        return
+    return msgBox
+		  
+
+def create_connection(db_file):
+    """ create a database connection to the SQLite database
+        specified by the db_file
+    :param db_file: database file
+    :return: Connection object or None
+    """
+    conn = None
+    try:
+        conn = sqlite3.connect(db_file)
+    except Error as e:
+        print(e)
+ 
+    return conn
+
+def exportByLot():
+    
+    while True:
+    
+        # Get lot number
+        lot_number = inputdialog('Lot Number: ').value
+        print(f'Lot # = {lot_number}')
+        if lot_number is None:
+            return
+        
+        # Get images of the lot
+        col_list = ['TImestamp', 'Status', 'Comment', 'File', 'Defects']
+        conn = create_connection(DB_FILE)
+        with conn:
+            cur = conn.cursor()
+            cur.execute('SELECT ' + ','.join(col_list) + ' from IMAGES where Comment like ?',(lot_number + '%',))
+            
+            rows = cur.fetchall()
+            show_data = False
+            if show_data:
+                for row in rows:
+                    print(row)
+        num_rows=len(rows)
+        print(f'# rows found={num_rows}')
+        if num_rows == 0:
+            print('No rows found')
+            return
+    
+        # Copy files to temp dir
+        tempdir_root = tempfile.gettempdir()
+        tempdir = os.path.join(tempdir_root,'Images for Lot Number')
+        if not os.path.isdir(tempdir):
+            os.mkdir(tempdir)
+        else:
+            for file in os.scandir(tempdir):
+                    os.unlink(file.path)
+        file_pos = col_list.index('File')
+        for idx,row in enumerate(rows):
+            file = row[file_pos]
+            shutil.copy(file,tempdir)
+            if idx == 0:
+                first_file = file 
+        with open(os.path.join(tempdir,f'Lot {lot_number}.txt'),'w') as f:
+            f.write(f'Images in lot {lot_number}:\n')
+            for row in rows:
+                print(row,file=f)
+        #launchExternalViewer(first_file)
+        os.system(f'start explorer "{tempdir}"')
+
+
+def launchExternalViewer(filename):
+    # Using PIL opens image in a temp file
+    # Using 
+    #   os.system(fr'start "Pillow" /WAIT "{filename}"')
+    # does not allow for scrolling to other pictures.  However, this seems like the best option
+    # Using
+    #   fr'rundll32 "C:\Program Files\Windows Photo Viewer\PhotoViewer.dll",ImageView_Fullscreen "{filename}"'
+    # doesn't support spaces in the image file name
+    cmd = fr'start "Pillow" /WAIT "{filename}"'
+    print(cmd)
+    os.system(cmd)
+    print('after')
+    
+    
+def exportAnnotationsForImage(img_file, label_dir):
+    
+    export_folder = r'c:\tmp\annotation_exports'
+    img_basename = osp.splitext(osp.basename(img_file))[0]
+    export_basepath = osp.join(export_folder,img_basename + '_export')
+    
+    for f in glob.glob(export_basepath + '*.png'):
+        os.remove(f)
+
+    label_file = user_extns.imgFileToLabelFileName(img_file, label_dir)
+    labelFile = labelme.LabelFile(label_file)    
+    labels_to_export = set([shape['label'] for shape in labelFile.shapes])
+    print(f'labels_to_export={labels_to_export}')
+    for label in labels_to_export:
+        shapes_to_export = [s for s in labelFile.shapes if s['label'] == label]
+        #print(f'shapes_to_export={shapes_to_export}')
+        print(f'# shapes_to_export for {label}={len(shapes_to_export)}')
+
+        # Load image to initialize the pixmap to the proper size
+        # Then, set all pixels to 0
+        # TODO Make more efficient.  Don't load file.  Create empty image with right size/attributes
+        pixmap = QtGui.QPixmap(img_file)
+        pixmap.fill(QtGui.QColor(0,0,0))
+        # Paint annotations
+        # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.)
+        p = QtGui.QPainter(pixmap)
+        for s in shapes_to_export:
+            s_obj = Shape(label=s['label'], shape_type=s['shape_type'],
+             flags=s['flags'], group_id=s['group_id'])
+            for pt in s['points']:
+                s_obj.addPoint(QtCore.QPointF(pt[0],pt[1]))
+            s_obj.close = True
+            s_obj.fill = True
+            s_obj.point_size = 0
+            s_obj.paint(p)
+        p.end()
+        img_to_export = pixmap.toImage()
+        img_to_export.convertTo(QtGui.QImage.Format_Indexed8)
+        
+        targ_file = export_basepath + f'_{label.replace("/","")}.png'
+        #TODO Move to PIL without saving to disk in order 
+        img_to_export.save(targ_file)
+                
+        img_tmp = PIL.Image.open(targ_file)
+        img_tmp = img_tmp.convert("L")
+        img_tmp.save(targ_file)    
+
+    
+    
+def exportAnnotationsFromImageDir():
+    img_dir = r'C:\Users\mherzo\AppData\Roaming\Cognex Corporation\Cognex ViDi Suite 3.4\workspaces\MH Test Vidi Workspace\b36e3836-b906-44ab-ac9a-a318102e9ea3\images'
+    for f in glob.glob(img_dir + r'\*'):
+        print(f)
+        if osp.basename(f) < '20200220' or osp.basename(f)[:4] == 'Img-':
+            continue
+            #label_dir = r'D:\Tissue Defect Inspection\Images3'
+        else:
+            label_dir = r'D:\Tissue Defect Inspection\Images4'
+        exportAnnotationsForImage(f, label_dir)
+        #break
+    
+    
+if __name__ == '__main__':
+    app = QCoreApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    #msgBox = dispMsgBox('1', '2', icon='Warning')
+    #msgBox.exec()
+    
+    #sys.exit(app.exec_())
+    exportAnnotationsFromImageDir()
+    
