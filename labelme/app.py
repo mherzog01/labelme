@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 
+# TODO:  Enter key on keypad doesn't stop Polygon drawing
+
 import functools
 import os
 import os.path as osp
@@ -17,18 +19,43 @@ from labelme import PY2
 from labelme import QT5
 
 from . import utils
+from labelme import user_extns
 from labelme.config import get_config
 from labelme.label_file import LabelFile
 from labelme.label_file import LabelFileError
 from labelme.logger import logger
 from labelme.shape import Shape
 from labelme.widgets import Canvas
+from labelme.widgets import ColorDialog
 from labelme.widgets import LabelDialog
-from labelme.widgets import LabelListWidget
-from labelme.widgets import LabelListWidgetItem
+from labelme.widgets import LabelQListWidget
 from labelme.widgets import ToolBar
 from labelme.widgets import UniqueLabelQListWidget
 from labelme.widgets import ZoomWidget
+
+import PIL 
+from PIL import Image
+
+
+#TODO:
+#1.	*Refresh file list every 1 sec
+#2.	Support oriented bounding boxes
+#3.	Add "Verify" to File menu
+#4.	Ability to create comments
+#5.	Cleaner way of handing input/output dirs.  
+#a.	Show output and source directories
+#b.	If change one, change the other
+#6.	Don't force mouse move to fully render context menu
+#7.	If delete file, don't clear image
+#8.	If polygons aren't selected and choose delete, don't prompt for delete confirmation
+#9.	Add VerifyFile to config shortcuts
+#10.	**Verify prompts for output dir every time
+#11.	**Poor performance loading images
+#12.	When in insert mode, highlight polygon if select an entry in the Polygon Labels list
+#13.	*Rotate picture
+#14.	*After save, stays in create mode.  
+#15.	 * Remember last input and output folders
+#16.	Enter on keypad causes polygons to be selected/completed
 
 
 # FIXME
@@ -87,8 +114,9 @@ class MainWindow(QtWidgets.QMainWindow):
             fit_to_content=self._config['fit_to_content'],
             flags=self._config['label_flags']
         )
+        #print(f"Labels={self._config['labels']}")
 
-        self.labelList = LabelListWidget()
+        self.labelList = LabelQListWidget()
         self.lastOpenDir = None
 
         self.flag_dock = self.flag_widget = None
@@ -100,10 +128,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.flag_dock.setWidget(self.flag_widget)
         self.flag_widget.itemChanged.connect(self.setDirty)
 
+        self.labelList.itemActivated.connect(self.labelSelectionChanged)
         self.labelList.itemSelectionChanged.connect(self.labelSelectionChanged)
         self.labelList.itemDoubleClicked.connect(self.editLabel)
+        # Connect to itemChanged to detect checkbox changes.
         self.labelList.itemChanged.connect(self.labelItemChanged)
-        self.labelList.itemDropped.connect(self.labelOrderChanged)
+        self.labelList.setDragDropMode(
+            QtWidgets.QAbstractItemView.InternalMove)
+        self.labelList.setParent(self)
         self.shape_dock = QtWidgets.QDockWidget(
             self.tr('Polygon Labels'),
             self
@@ -137,6 +169,10 @@ class MainWindow(QtWidgets.QMainWindow):
         fileListLayout.setSpacing(0)
         fileListLayout.addWidget(self.fileSearch)
         fileListLayout.addWidget(self.fileListWidget)
+        self.showLabeledCheckbox = QtWidgets.QCheckBox('Show Labeled')
+        fileListLayout.addWidget(self.showLabeledCheckbox)
+        self.showLabeledCheckbox.stateChanged.connect(self.refreshDirImages)        
+        
         self.file_dock = QtWidgets.QDockWidget(self.tr(u'File List'), self)
         self.file_dock.setObjectName(u'Files')
         fileListWidget = QtWidgets.QWidget()
@@ -144,6 +180,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.file_dock.setWidget(fileListWidget)
 
         self.zoomWidget = ZoomWidget()
+        self.colorDialog = ColorDialog(parent=self)
 
         self.canvas = self.labelList.canvas = Canvas(
             epsilon=self._config['epsilon'],
@@ -227,6 +264,14 @@ class MainWindow(QtWidgets.QMainWindow):
             'delete',
             self.tr('Delete current label file'),
             enabled=False)
+        
+        verifyFile = action(
+            self.tr('&Verify File'),
+            self.verifyFile,
+            None,
+            'verify',
+            self.tr('Create label file for current image, even if no defects'),
+            enabled=False)
 
         changeOutputDir = action(
             self.tr('&Change Output Dir'),
@@ -252,6 +297,27 @@ class MainWindow(QtWidgets.QMainWindow):
             tip='Save image data in label file',
             checkable=True,
             checked=self._config['store_data'],
+        )
+
+        exportMasks = action(
+            text='Export Masks',
+            slot=self.exportMasks,
+            tip='Exports a set of mask images for importing into ViDi',
+            enabled=False
+        )
+
+        exportByLot = action(
+            text='Export By Lot',
+            slot=self.exportByLot,
+            tip='Exports all images for a lot into a temporary folder',
+            enabled=True
+        )
+
+        launchExternalViewer = action(
+            text='View Image in External Viewer',
+            slot=self.launchExternalViewer,
+            tip='Loads current image in external image viewer',
+            enabled=False
         )
 
         close = action('&Close', self.closeFile, shortcuts['close'], 'close',
@@ -330,11 +396,11 @@ class MainWindow(QtWidgets.QMainWindow):
                                shortcuts['undo_last_point'], 'undo',
                                self.tr('Undo last drawn point'), enabled=False)
         addPointToEdge = action(
-            text=self.tr('Add Point to Edge'),
-            slot=self.canvas.addPointToEdge,
-            shortcut=shortcuts['add_point_to_edge'],
-            icon='edit',
-            tip=self.tr('Add point to the nearest edge'),
+            self.tr('Add Point to Edge'),
+            self.canvas.addPointToEdge,
+            None,
+            'edit',
+            self.tr('Add point to the nearest edge'),
             enabled=False,
         )
         removePoint = action(
@@ -441,6 +507,7 @@ class MainWindow(QtWidgets.QMainWindow):
             changeOutputDir=changeOutputDir,
             save=save, saveAs=saveAs, open=open_, close=close,
             deleteFile=deleteFile,
+            verifyFile=verifyFile,
             toggleKeepPrevMode=toggle_keep_prev_mode,
             delete=delete, edit=edit, copy=copy,
             undoLastPoint=undoLastPoint, undo=undo,
@@ -455,7 +522,7 @@ class MainWindow(QtWidgets.QMainWindow):
             fitWindow=fitWindow, fitWidth=fitWidth,
             zoomActions=zoomActions,
             openNextImg=openNextImg, openPrevImg=openPrevImg,
-            fileMenuActions=(open_, opendir, save, saveAs, close, quit),
+            fileMenuActions=(open_, opendir, save, saveAs, close, verifyFile, quit),
             tool=(),
             # XXX: need to add some actions here to activate the shortcut
             editMenu=(
@@ -486,6 +553,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 undoLastPoint,
                 addPointToEdge,
                 removePoint,
+                verifyFile,
             ),
             onLoadActive=(
                 close,
@@ -496,8 +564,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 createPointMode,
                 createLineStripMode,
                 editMode,
+                verifyFile,
+                exportMasks,
+                launchExternalViewer,
             ),
             onShapesPresent=(saveAs, hideAll, showAll),
+            exportMasks=exportMasks,
+            launchExternalViewer=launchExternalViewer,
+            exportByLot=exportByLot,
         )
 
         self.canvas.edgeSelected.connect(self.canvasShapeEdgeSelected)
@@ -507,6 +581,7 @@ class MainWindow(QtWidgets.QMainWindow):
             file=self.menu(self.tr('&File')),
             edit=self.menu(self.tr('&Edit')),
             view=self.menu(self.tr('&View')),
+            tools=self.menu(self.tr('&Tools')),
             help=self.menu(self.tr('&Help')),
             recentFiles=QtWidgets.QMenu(self.tr('Open &Recent')),
             labelList=labelMenu,
@@ -525,6 +600,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 saveAuto,
                 changeOutputDir,
                 saveWithImageData,
+                verifyFile,
                 close,
                 deleteFile,
                 None,
@@ -554,6 +630,14 @@ class MainWindow(QtWidgets.QMainWindow):
                 None,
             ),
         )
+        utils.addActions(
+            self.menus.tools,
+            (
+                exportMasks,
+                exportByLot,
+                launchExternalViewer,
+            ),
+        )
 
         self.menus.file.aboutToShow.connect(self.updateFileMenu)
 
@@ -575,7 +659,7 @@ class MainWindow(QtWidgets.QMainWindow):
             openNextImg,
             openPrevImg,
             save,
-            deleteFile,
+            verifyFile,
             None,
             createMode,
             editMode,
@@ -674,7 +758,7 @@ class MainWindow(QtWidgets.QMainWindow):
     # Support Functions
 
     def noShapes(self):
-        return not len(self.labelList)
+        return not self.labelList.itemsToShapes
 
     def populateModeActions(self):
         tool, menu = self.actions.tool, self.actions.menu
@@ -696,10 +780,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setDirty(self):
         if self._config['auto_save'] or self.actions.saveAuto.isChecked():
-            label_file = osp.splitext(self.imagePath)[0] + '.json'
-            if self.output_dir:
-                label_file_without_path = osp.basename(label_file)
-                label_file = osp.join(self.output_dir, label_file_without_path)
+            label_file = user_extns.imgFileToLabelFileName(self.imagePath, self.output_dir)
             self.saveLabels(label_file)
             return
         self.dirty = True
@@ -792,6 +873,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.delete.setEnabled(not drawing)
 
     def toggleDrawMode(self, edit=True, createMode='polygon'):
+        # If, in create mode, the user switches to a different shape 
+        # before committing the shape, the program will crash.
+        if (not edit and createMode and 
+             		    self.canvas.createMode and
+            		    createMode != self.canvas.createMode and
+                        self.canvas.current and
+                        not self.canvas.current.isClosed()):
+            user_extns.dispMsgBox(f'You are currently creating a {self.canvas.createMode}.  You cannot switch to creating a {createMode}.')
+            return
         self.canvas.setEditing(edit)
         self.canvas.createMode = createMode
         if edit:
@@ -882,9 +972,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     return True
         return False
 
-    def editLabel(self, item=None):
-        if item and not isinstance(item, LabelListWidgetItem):
-            raise TypeError('item must be LabelListWidgetItem type')
+    def editLabel(self, item=False):
+        if item and not isinstance(item, QtWidgets.QListWidgetItem):
+            raise TypeError('unsupported type of item: {}'.format(type(item)))
 
         if not self.canvas.editing():
             return
@@ -892,7 +982,7 @@ class MainWindow(QtWidgets.QMainWindow):
             item = self.currentItem()
         if item is None:
             return
-        shape = item.shape()
+        shape = self.labelList.get_shape_from_item(item)
         if shape is None:
             return
         text, flags, group_id = self.labelDialog.popUp(
@@ -918,7 +1008,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.setDirty()
         if not self.uniqLabelList.findItemsByLabel(shape.label):
             item = QtWidgets.QListWidgetItem()
-            item.setData(Qt.UserRole, shape.label)
+            item.setData(role=Qt.UserRole, value=shape.label)
             self.uniqLabelList.addItem(item)
 
     def fileSearchChanged(self):
@@ -952,8 +1042,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.canvas.selectedShapes = selected_shapes
         for shape in self.canvas.selectedShapes:
             shape.selected = True
-            item = self.labelList.findItemByShape(shape)
-            self.labelList.selectItem(item)
+            item = self.labelList.get_item_from_shape(shape)
+            item.setSelected(True)
             self.labelList.scrollToItem(item)
         self._noSelectionSlot = False
         n_selected = len(selected_shapes)
@@ -966,8 +1056,16 @@ class MainWindow(QtWidgets.QMainWindow):
             text = shape.label
         else:
             text = '{} ({})'.format(shape.label, shape.group_id)
-        label_list_item = LabelListWidgetItem(text, shape)
-        self.labelList.addItem(label_list_item)
+        item = QtWidgets.QListWidgetItem()
+        item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
+        item.setCheckState(Qt.Checked)
+        self.labelList.itemsToShapes.append((item, shape))
+        self.labelList.addItem(item)
+        qlabel = QtWidgets.QLabel()
+        qlabel.setText(text)
+        qlabel.setAlignment(QtCore.Qt.AlignBottom)
+        item.setSizeHint(qlabel.sizeHint())
+        self.labelList.setItemWidget(item, qlabel)
         if not self.uniqLabelList.findItemsByLabel(shape.label):
             item = self.uniqLabelList.createItemFromLabel(shape.label)
             self.uniqLabelList.addItem(item)
@@ -982,7 +1080,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         r, g, b = rgb
-        label_list_item.setText(
+        qlabel.setText(
             '{} <font color="#{:02x}{:02x}{:02x}">●</font>'
             .format(text, r, g, b)
         )
@@ -1008,8 +1106,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def remLabels(self, shapes):
         for shape in shapes:
-            item = self.labelList.findItemByShape(shape)
-            self.labelList.removeItem(item)
+            item = self.labelList.get_item_from_shape(shape)
+            self.labelList.takeItem(self.labelList.row(item))
 
     def loadShapes(self, shapes, replace=True):
         self._noSelectionSlot = True
@@ -1073,7 +1171,7 @@ class MainWindow(QtWidgets.QMainWindow):
             ))
             return data
 
-        shapes = [format_shape(item.shape()) for item in self.labelList]
+        shapes = [format_shape(shape) for shape in self.labelList.shapes]
         flags = {}
         for i in range(self.flag_widget.count()):
             item = self.flag_widget.item(i)
@@ -1127,19 +1225,16 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.canvas.editing():
             selected_shapes = []
             for item in self.labelList.selectedItems():
-                selected_shapes.append(item.shape())
+                shape = self.labelList.get_shape_from_item(item)
+                selected_shapes.append(shape)
             if selected_shapes:
                 self.canvas.selectShapes(selected_shapes)
             else:
                 self.canvas.deSelectShape()
 
     def labelItemChanged(self, item):
-        shape = item.shape()
+        shape = self.labelList.get_shape_from_item(item)
         self.canvas.setShapeVisible(shape, item.checkState() == Qt.Checked)
-
-    def labelOrderChanged(self):
-        self.setDirty()
-        self.canvas.loadShapes([item.shape() for item in self.labelList])
 
     # Callback functions:
 
@@ -1237,7 +1332,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.adjustScale()
 
     def togglePolygons(self, value):
-        for item in self.labelList:
+        for item, shape in self.labelList.itemsToShapes:
             item.setCheckState(Qt.Checked if value else Qt.Unchecked)
 
     def loadFile(self, filename=None):
@@ -1263,10 +1358,7 @@ class MainWindow(QtWidgets.QMainWindow):
             return False
         # assumes same name, but json extension
         self.status(self.tr("Loading %s...") % osp.basename(str(filename)))
-        label_file = osp.splitext(filename)[0] + '.json'
-        if self.output_dir:
-            label_file_without_path = osp.basename(label_file)
-            label_file = osp.join(self.output_dir, label_file_without_path)
+        label_file = user_extns.imgFileToLabelFileName(filename, self.output_dir)
         if QtCore.QFile.exists(label_file) and \
                 LabelFile.is_label_file(label_file):
             try:
@@ -1317,7 +1409,7 @@ class MainWindow(QtWidgets.QMainWindow):
             if self.labelFile.flags is not None:
                 flags.update(self.labelFile.flags)
         self.loadFlags(flags)
-        if self._config['keep_prev'] and self.noShapes():
+        if self._config['keep_prev'] and not self.labelList.shapes:
             self.loadShapes(prev_shapes, replace=False)
             self.setDirty()
         else:
@@ -1500,9 +1592,10 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.imageList.index(current_filename))
             self.fileListWidget.repaint()
 
-    def saveFile(self, _value=False):
-        assert not self.image.isNull(), "cannot save empty image"
-        if self._config['flags'] or self.hasLabels():
+    def saveFile(self, _value=False, verify=False):
+        if not verify:
+            assert not self.image.isNull(), "cannot save empty image"
+        if verify or self._config['flags'] or self.hasLabels():
             if self.labelFile:
                 # DL20180323 - overwrite when in directory
                 self._saveFile(self.labelFile.filename)
@@ -1587,10 +1680,13 @@ class MainWindow(QtWidgets.QMainWindow):
             item.setCheckState(Qt.Unchecked)
 
             self.resetState()
+            
+    def verifyFile(self):
+        self.saveFile(verify=True)
 
     # Message Dialogs. #
     def hasLabels(self):
-        if self.noShapes():
+        if not self.labelList.itemsToShapes:
             self.errorMessage(
                 'No objects labeled',
                 'You must label at least one object to save the file.')
@@ -1678,6 +1774,10 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QFileDialog.DontResolveSymlinks))
         self.importDirImages(targetDirPath)
 
+    def refreshDirImages(self):
+        #print(f'dirpath={dirpath}.  showLabeledCheckbox.isChecked()={self.showLabeledCheckbox.isChecked()}')
+        self.importDirImages(self.lastOpenDir, pattern=self.fileSearch.text(), load=False)
+
     @property
     def imageList(self):
         lst = []
@@ -1699,14 +1799,15 @@ class MainWindow(QtWidgets.QMainWindow):
         for filename in self.scanAllImages(dirpath):
             if pattern and pattern not in filename:
                 continue
-            label_file = osp.splitext(filename)[0] + '.json'
-            if self.output_dir:
-                label_file_without_path = osp.basename(label_file)
-                label_file = osp.join(self.output_dir, label_file_without_path)
+            # TODO:  Support XML and other label file formats
+            label_file = user_extns.imgFileToLabelFileName(filename, self.output_dir)
+            good_label_file = QtCore.QFile.exists(label_file) and \
+                    LabelFile.is_label_file(label_file)
+            if not self.showLabeledCheckbox.isChecked() and good_label_file:
+                continue
             item = QtWidgets.QListWidgetItem(filename)
             item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
-            if QtCore.QFile.exists(label_file) and \
-                    LabelFile.is_label_file(label_file):
+            if good_label_file:
                 item.setCheckState(Qt.Checked)
             else:
                 item.setCheckState(Qt.Unchecked)
@@ -1725,3 +1826,49 @@ class MainWindow(QtWidgets.QMainWindow):
                     images.append(relativePath)
         images.sort(key=lambda x: x.lower())
         return images
+
+    # This routine is related to user_extns.exportAnnotationsForImage, but it is not the same:
+    # The user could have unsaved annotations when they choose export
+    def exportMasks(self):
+        targ_dir = r'c:\tmp\work2'
+        targ_dir_and_prefix = targ_dir + r'\mask'
+        targ_dir_and_prefix = user_extns.inputdialog(msg=r'Target folder \ prefix ',default_value=targ_dir_and_prefix).value
+        if not targ_dir_and_prefix:
+            print('No images exported')
+            return
+        labels_to_export = set([shape['label'] for shape in self.labelFile.shapes])
+        print(f'labels_to_export={labels_to_export}')
+        for label in labels_to_export:
+            shapes_to_export = [s for s in self.labelFile.shapes if s['label'] == label]
+            print(f'shapes_to_export={shapes_to_export}')
+            #self.loadLabels(shapes_to_export)
+            # Manually draw shapes - can't seem to get a bitmap from Qt
+            pixmap = self.canvas.pixmap.copy() #QtGui.QPixmap()
+            p = QtGui.QPainter(pixmap)
+            for s in shapes_to_export:
+                s_obj = Shape(label=s['label'], shape_type=s['shape_type'],
+                 flags=s['flags'], group_id=s['group_id'])
+                for pt in s['points']:
+                    s_obj.addPoint(QtCore.QPointF(pt[0],pt[1]))
+                s_obj.close = True
+                s_obj.fill = True
+                s_obj.point_size = 0
+                s_obj.paint(p)
+            p.end()
+            img_to_export = pixmap.toImage()
+            img_to_export.convertTo(QtGui.QImage.Format_Indexed8)
+            targ_file = targ_dir_and_prefix + f'_{label.replace("/","")}.png'
+            #TODO Move to PIL without saving to disk in order 
+            img_to_export.save(targ_file)
+                    
+            img_tmp = PIL.Image.open(targ_file)
+            img_tmp = img_tmp.convert("L")
+            img_tmp.save(targ_file)    
+        print('Image export complete')
+            
+    def exportByLot(self):
+        user_extns.exportByLot()
+        
+    def launchExternalViewer(self):
+        user_extns.launchExternalViewer(self.filename)
+
