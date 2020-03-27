@@ -5,6 +5,7 @@ from qtpy import QtWidgets
 from labelme import QT5
 from labelme.shape import Shape
 import labelme.utils
+from labelme.logger import logger
 
 
 # TODO(unknown):
@@ -63,15 +64,13 @@ class Canvas(QtWidgets.QWidget):
         self.offsets = QtCore.QPoint(), QtCore.QPoint()
         self.scale = 1.0
         self.pixmap = QtGui.QPixmap()
+        self.final_pixmap = QtGui.QPixmap()
         self.visible = {}
         self._hideBackround = False
         self.hideBackround = False
         self.hShape = None
-        self.prevhShape = None
         self.hVertex = None
-        self.prevhVertex = None
         self.hEdge = None
-        self.prevhEdge = None
         self.movingShape = False
         self._painter = QtGui.QPainter()
         self._cursor = CURSOR_DEFAULT
@@ -82,7 +81,11 @@ class Canvas(QtWidgets.QWidget):
         # Set widget options.
         self.setMouseTracking(True)
         self.setFocusPolicy(QtCore.Qt.WheelFocus)
-
+        
+        # #https://stackoverflow.com/questions/13973211/an-event-for-focus-changed
+        # self.installEventFilter(self)
+        # self.lostFocus = False
+                
     def fillDrawing(self):
         return self._fill_drawing
 
@@ -154,10 +157,6 @@ class Canvas(QtWidgets.QWidget):
         if self.hShape:
             self.hShape.highlightClear()
             self.update()
-        self.prevhShape = self.hShape
-        self.prevhVertex = self.hVertex
-        self.prevhEdge = self.hEdge
-        self.hShape = self.hVertex = self.hEdge = None
 
     def selectedVertex(self):
         return self.hVertex is not None
@@ -251,9 +250,9 @@ class Canvas(QtWidgets.QWidget):
             if index is not None:
                 if self.selectedVertex():
                     self.hShape.highlightClear()
-                self.prevhVertex = self.hVertex = index
-                self.prevhShape = self.hShape = shape
-                self.prevhEdge = self.hEdge = index_edge
+                self.hVertex = index
+                self.hShape = shape
+                self.hEdge = index_edge
                 shape.highlightVertex(index, shape.MOVE_VERTEX)
                 self.overrideCursor(CURSOR_POINT)
                 self.setToolTip(self.tr("Click & drag to move point"))
@@ -263,10 +262,9 @@ class Canvas(QtWidgets.QWidget):
             elif shape.containsPoint(pos):
                 if self.selectedVertex():
                     self.hShape.highlightClear()
-                self.prevhVertex = self.hVertex
                 self.hVertex = None
-                self.prevhShape = self.hShape = shape
-                self.prevhEdge = self.hEdge = index_edge
+                self.hShape = shape
+                self.hEdge = index_edge
                 self.setToolTip(
                     self.tr("Click & drag to move shape '%s'") % shape.label)
                 self.setStatusTip(self.toolTip())
@@ -279,8 +277,8 @@ class Canvas(QtWidgets.QWidget):
         self.vertexSelected.emit(self.hVertex is not None)
 
     def addPointToEdge(self):
-        shape = self.prevhShape
-        index = self.prevhEdge
+        shape = self.hShape
+        index = self.hEdge
         point = self.prevMovePoint
         if shape is None or index is None or point is None:
             return
@@ -292,10 +290,11 @@ class Canvas(QtWidgets.QWidget):
         self.movingShape = True
 
     def removeSelectedPoint(self):
-        shape = self.prevhShape
-        point = self.prevMovePoint
-        if shape is None or point is None:
+        if (self.hShape is None and
+                self.prevMovePoint is None):
             return
+        shape = self.hShape
+        point = self.prevMovePoint
         index = shape.nearestVertex(point, self.epsilon)
         shape.removePoint(index)
         # shape.highlightVertex(index, shape.MOVE_VERTEX)
@@ -304,12 +303,35 @@ class Canvas(QtWidgets.QWidget):
         self.hEdge = None
         self.movingShape = True  # Save changes
 
+    # #https://stackoverflow.com/questions/13973211/an-event-for-focus-changed
+    # def eventFilter(self, object, event):
+    #     #if event.type() == QtCore.QEvent.WindowActivate:
+    #         #print ("widget window has gained focus")
+    #     #    self.lostFocus = True
+    #     if event.type()== QtCore.QEvent.WindowDeactivate:
+    #         self.lostFocus = True
+    #         #print ("widget window has lost focus")
+    #     #elif event.type()== QtCore.QEvent.FocusIn:
+    #     #    print ("widget has gained keyboard focus")
+    #     #elif event.type()== QtCore.QEvent.FocusOut:
+    #     #    print ("widget has lost keyboard focus")
+    #     return False
+
     def mousePressEvent(self, ev):
         if QT5:
             pos = self.transformPos(ev.localPos())
         else:
             pos = self.transformPos(ev.posF())
         if ev.button() == QtCore.Qt.LeftButton:
+		    # If current window does not have focus and the user activates the window by performing a left click in create mode, 
+			# don't create a point 
+			# invoke a function to consume/destroy the mouse click event -- opposite of apply()?
+			#
+            # logger.info(f'Lost focus={self.lostFocus}')
+            # if self.lostFocus:
+            #     self.lostFocus = False
+            #     logger.info('Exiting because gainning focus')
+            #     return
             if self.drawing():
                 if self.current:
                     # Add point to existing shape.
@@ -512,12 +534,13 @@ class Canvas(QtWidgets.QWidget):
 
         p = self._painter
         p.begin(self)
+        #p.begin(self.pixmap)
         p.setRenderHint(QtGui.QPainter.Antialiasing)
         p.setRenderHint(QtGui.QPainter.HighQualityAntialiasing)
         p.setRenderHint(QtGui.QPainter.SmoothPixmapTransform)
-
+ 
         p.scale(self.scale, self.scale)
-        p.translate(self.offsetToCenter())
+        p.translate(self.offsetToCenter())                
 
         p.drawPixmap(0, 0, self.pixmap)
         Shape.scale = self.scale
@@ -542,6 +565,12 @@ class Canvas(QtWidgets.QWidget):
             drawing_shape.paint(p)
 
         p.end()
+#        self.final_pixmap.save(r'c:\tmp\test.bmp')
+#
+#        p = self._painter
+#        p.begin(self)
+#        p.drawPixmap(0,0,self.final_pixmap)
+#        p.end()
 
     def transformPos(self, point):
         """Convert from widget-logical coordinates to painter-logical ones."""
