@@ -287,7 +287,7 @@ class MainWindow(QtWidgets.QMainWindow):
             icon='save',
             tip=self.tr('Save automatically'),
             checkable=True,
-            enabled=True,
+            enabled=False,
         )
         saveAuto.setChecked(self._config['auto_save'])
 
@@ -1830,11 +1830,13 @@ class MainWindow(QtWidgets.QMainWindow):
     # This routine is related to user_extns.exportAnnotationsForImage, but it is not the same:
     # The user could have unsaved annotations when they choose export
     def exportMasks(self):
-        targ_dir = r'c:\tmp\work2'
-        targ_dir_and_prefix = targ_dir + r'\mask'
-        targ_dir_and_prefix = user_extns.inputdialog(msg=r'Target folder \ prefix ',default_value=targ_dir_and_prefix).value
+        targ_dir = r'c:\tmp\work3'
+        targ_dir_and_prefix = targ_dir
+        targ_dir_and_prefix = user_extns.inputdialog(msg=r'Target folder ',default_value=targ_dir_and_prefix).value
         if not targ_dir_and_prefix:
-            print('No images exported')
+            msg = 'No images exported'
+            self.status(msg)
+            print(msg)
             return
         labels_to_export = set([shape['label'] for shape in self.labelFile.shapes])
         print(f'labels_to_export={labels_to_export}')
@@ -1843,7 +1845,13 @@ class MainWindow(QtWidgets.QMainWindow):
             print(f'shapes_to_export={shapes_to_export}')
             #self.loadLabels(shapes_to_export)
             # Manually draw shapes - can't seem to get a bitmap from Qt
-            pixmap = self.canvas.pixmap.copy() #QtGui.QPixmap()
+			
+            overlay_over_image = False
+            if overlay_over_image:
+                pixmap = self.canvas.pixmap.copy() #QtGui.QPixmap()
+            else:
+                cur_pixmap_size = self.canvas.pixmap.size()
+                pixmap = QtGui.QPixmap(cur_pixmap_size.width(), cur_pixmap_size.height())
             p = QtGui.QPainter(pixmap)
             for s in shapes_to_export:
                 s_obj = Shape(label=s['label'], shape_type=s['shape_type'],
@@ -1857,14 +1865,18 @@ class MainWindow(QtWidgets.QMainWindow):
             p.end()
             img_to_export = pixmap.toImage()
             img_to_export.convertTo(QtGui.QImage.Format_Indexed8)
-            targ_file = targ_dir_and_prefix + f'_{label.replace("/","")}.png'
+            basename = osp.basename(self.labelFile.filename)
+            basename = osp.splitext(basename)[0]
+            targ_file = osp.join(targ_dir_and_prefix,basename + f'_{label.replace("/","")}.png')
             #TODO Move to PIL without saving to disk in order 
             img_to_export.save(targ_file)
                     
             img_tmp = PIL.Image.open(targ_file)
             img_tmp = img_tmp.convert("L")
             img_tmp.save(targ_file)    
-        print('Image export complete')
+        msg = 'Image export complete'
+        self.status(msg)
+        print(msg)
             
     def exportByLot(self):
         user_extns.exportByLot()
