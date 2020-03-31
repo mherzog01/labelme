@@ -5,8 +5,10 @@
 import functools
 import os
 import os.path as osp
+import pathlib
 import re
 import webbrowser
+import pandas as pd
 
 import imgviz
 from qtpy import QtCore
@@ -18,7 +20,7 @@ from labelme import __appname__
 from labelme import PY2
 from labelme import QT5
 
-from . import utils
+from labelme import utils
 from labelme import user_extns
 from labelme.config import get_config
 from labelme.label_file import LabelFile
@@ -32,8 +34,6 @@ from labelme.widgets import LabelListWidgetItem
 from labelme.widgets import ToolBar
 from labelme.widgets import UniqueLabelQListWidget
 from labelme.widgets import ZoomWidget
-
-from labelme.compare import CompareWindow
 
 import PIL 
 from PIL import Image
@@ -99,7 +99,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._config = config
 
         super(MainWindow, self).__init__()
-        self.setWindowTitle(__appname__ + ' - Annotation Entry')
+        self.setWindowTitle(__appname__)
 
         # Whether we need to save or not.
         self.dirty = False
@@ -120,6 +120,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.labelList = LabelListWidget()
         self.lastOpenDir = None
 
+        # ----------------------------------------------------        
+        # -------- Dock windows - begin definitions ----------
+        # ----------------------------------------------------        
+        
+        # Dock window - Flags
         self.flag_dock = self.flag_widget = None
         self.flag_dock = QtWidgets.QDockWidget(self.tr('Flags'), self)
         self.flag_dock.setObjectName('Flags')
@@ -129,17 +134,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.flag_dock.setWidget(self.flag_widget)
         self.flag_widget.itemChanged.connect(self.setDirty)
 
+        # Dock window - Label list
         self.labelList.itemSelectionChanged.connect(self.labelSelectionChanged)
         self.labelList.itemDoubleClicked.connect(self.editLabel)
         self.labelList.itemChanged.connect(self.labelItemChanged)
         self.labelList.itemDropped.connect(self.labelOrderChanged)
         self.shape_dock = QtWidgets.QDockWidget(
-            self.tr('Polygon Labels'),
-            self
-        )
+                        self.getLabelDockTitle(), self)
         self.shape_dock.setObjectName('Labels')
         self.shape_dock.setWidget(self.labelList)
 
+        # Dock window - Unique labels
         self.uniqLabelList = UniqueLabelQListWidget()
         self.uniqLabelList.setToolTip(self.tr(
             "Select label to start annotating for it. "
@@ -154,6 +159,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.label_dock.setObjectName(u'Label List')
         self.label_dock.setWidget(self.uniqLabelList)
 
+        # Dock window - file list
         self.fileSearch = QtWidgets.QLineEdit()
         self.fileSearch.setPlaceholderText(self.tr('Search Filename'))
         self.fileSearch.textChanged.connect(self.fileSearchChanged)
@@ -175,6 +181,53 @@ class MainWindow(QtWidgets.QMainWindow):
         fileListWidget = QtWidgets.QWidget()
         fileListWidget.setLayout(fileListLayout)
         self.file_dock.setWidget(fileListWidget)
+        
+        # Dock window - Annotator list
+        self.annotator_dock = QtWidgets.QDockWidget(self.tr(u'Annotator List'), self)
+        self.annotator_dock.setObjectName(u'Annotators')
+        annotatorListLayout = QtWidgets.QVBoxLayout()
+        annotatorListLayout.setContentsMargins(0, 0, 0, 0)
+        annotatorListLayout.setSpacing(0)
+  
+        self.selLabelsToShow = QtWidgets.QComboBox()
+        
+        #Set color of combobox to white
+        #https://stackoverflow.com/questions/54160285/how-to-set-background-color-of-qcombobox-button
+        cbstyle =  "QComboBox QAbstractItemView {"
+        cbstyle += " border: 1px solid grey;"
+        cbstyle += " background: white;"
+        cbstyle += " selection-background-color: blue;"
+        cbstyle += " }"
+        cbstyle += " QComboBox {"
+        cbstyle += " background: white;"
+        cbstyle += "}"
+        self.selLabelsToShow.setStyleSheet(cbstyle)
+  
+        for label in self._config['labels']:
+            self.selLabelsToShow.addItem(label)
+        annotatorListLayout.addWidget(self.selLabelsToShow)
+  
+        self.annotationSessionList = QtWidgets.QListWidget()
+        #TODO Get from config file and glob
+        valueList = ['SME A Sarvey, T1','SME A Sarvey, T2','SME A Sarvey, T3','SME R Jabbal, T1','SME R Jabbal, T2','SME R Jabbal, T3','SME T Canty, T1','SME T Canty, T2','SME T Canty, T3']
+        self.annotationSessionList = QtWidgets.QListWidget()
+        for value in valueList:
+              listItem = QtWidgets.QListWidgetItem(value)
+              listItem.setFlags(listItem.flags() | Qt.ItemIsUserCheckable)
+              listItem.setCheckState(Qt.Checked)
+              self.annotationSessionList.addItem(listItem)        
+        annotatorListLayout.addWidget(self.annotationSessionList)
+        
+        #TODO Get from Config File
+        self.groundTruthDirName = 'Ground Truth'
+        
+        annotatorListWidget = QtWidgets.QWidget()
+        annotatorListWidget.setLayout(annotatorListLayout)
+        self.annotator_dock.setWidget(annotatorListWidget)
+		
+        # ----------------------------------------------------        
+        # -------- Dock windows - end definition--------------
+        # ----------------------------------------------------        
 
         self.zoomWidget = ZoomWidget()
 
@@ -216,6 +269,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addDockWidget(Qt.RightDockWidgetArea, self.label_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.shape_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.annotator_dock)
 
         # Actions
         action = functools.partial(utils.newAction, self)
@@ -295,6 +349,10 @@ class MainWindow(QtWidgets.QMainWindow):
             checked=self._config['store_data'],
         )
 
+
+        # ===============================================
+        # User extensions - begin
+        # -----------------------------------------------
         exportMasks = action(
             text='Export Masks',
             slot=self.exportMasks,
@@ -316,12 +374,25 @@ class MainWindow(QtWidgets.QMainWindow):
             enabled=False
         )
 
-        compareAnnotations = action(
-            text='Compare Annotations',
-            slot=self.compareAnnotations,
-            tip='Browse images, and for each, compare multiple annotations for the image displayed',
+        groundTruthBuilderMode = action(
+            text='Ground Truth Mode',
+            slot=self.groundTruthBuilderMode,
+            tip='Browse images, and for each, compare multiple annotations for the image displayed.  Create Ground Truth annotation set.',
+            enabled=True,
+            checkable=True
+        )
+        groundTruthBuilderMode.setChecked(False)
+
+        dispSettings = action(
+            text='Display Settings',
+            slot=self.dispSettings,
+            tip='Displays settings such as the current input and output folders',
             enabled=True
         )
+
+        # -----------------------------------------------
+        # User extensions - End
+        # ===============================================
 
         close = action('&Close', self.closeFile, shortcuts['close'], 'close',
                        'Close current file')
@@ -496,7 +567,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         fill_drawing.trigger()
 
-        # Lavel list context menu.
+        # Label list context menu.
         labelMenu = QtWidgets.QMenu()
         utils.addActions(labelMenu, (edit, delete))
         self.labelList.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -575,7 +646,7 @@ class MainWindow(QtWidgets.QMainWindow):
             exportMasks=exportMasks,
             launchExternalViewer=launchExternalViewer,
             exportByLot=exportByLot,
-            compareAnnotations=compareAnnotations,
+            groundTruthBuilderMode=groundTruthBuilderMode,
         )
 
         self.canvas.edgeSelected.connect(self.canvasShapeEdgeSelected)
@@ -640,7 +711,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 exportMasks,
                 exportByLot,
                 launchExternalViewer,
-                compareAnnotations,
+                groundTruthBuilderMode,
+                dispSettings,
             ),
         )
 
@@ -704,6 +776,17 @@ class MainWindow(QtWidgets.QMainWindow):
             Qt.Horizontal: {},
             Qt.Vertical: {},
         }  # key=filename, value=scroll_value
+        
+        # Setup related to Ground Truth Mode
+        self.setupGroundTruthBuilder(refreshImageList=False)
+        dfAllImages = pd.DataFrame(columns=['Image Folder', 'File Name', 'Ground Truth Group', 'Is Ground Truth'])
+        dfAllImages.index.name = 'Image Path'
+        self.dfAllImages = dfAllImages
+        gt_grp_transforms = []
+        # TODO Get from config file
+        gt_grp_transforms.append(lambda x:x[4:] if len(x) > 4 and x[3] == '-' and x[:2].isnumeric() else x)
+        gt_grp_transforms.append(lambda x:x.lower())
+        self.gt_grp_transforms = gt_grp_transforms
 
         if filename is not None and osp.isdir(filename):
             self.importDirImages(filename, load=False)
@@ -854,6 +937,16 @@ class MainWindow(QtWidgets.QMainWindow):
         elif len(self.recentFiles) >= self.maxRecent:
             self.recentFiles.pop()
         self.recentFiles.insert(0, filename)
+        
+    def getLabelDockTitle(self):
+        base_title = self.tr('Polygon Labels')
+        if self.noShapes():
+            return base_title
+        return f'{base_title} - # Labels: {len(self.labelList)}'
+
+    def setLabelDockTitle(self):
+        self.shape_dock.setWindowTitle(self.getLabelDockTitle())
+
 
     # Callbacks
 
@@ -1006,10 +1099,7 @@ class MainWindow(QtWidgets.QMainWindow):
         shape.label = text
         shape.flags = flags
         shape.group_id = group_id
-        if shape.group_id is None:
-            item.setText(shape.label)
-        else:
-            item.setText('{} ({})'.format(shape.label, shape.group_id))
+        item.setText(self.getShapeDisplayLabel(shape))
         self.setDirty()
         if not self.uniqLabelList.findItemsByLabel(shape.label):
             item = QtWidgets.QListWidgetItem()
@@ -1056,11 +1146,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.copy.setEnabled(n_selected)
         self.actions.edit.setEnabled(n_selected == 1)
 
+    def getShapeDisplayLabel(self, shape):
+        text = f'{shape.label}'
+        if shape.group_id:
+            text += f' ({shape.group_id})'
+        if hasattr(shape,'source') and not shape.source is None:
+            text += f' ({shape.source})'
+        return text
+
     def addLabel(self, shape):
-        if shape.group_id is None:
-            text = shape.label
-        else:
-            text = '{} ({})'.format(shape.label, shape.group_id)
+        text = self.getShapeDisplayLabel(shape)
         label_list_item = LabelListWidgetItem(text, shape)
         self.labelList.addItem(label_list_item)
         if not self.uniqLabelList.findItemsByLabel(shape.label):
@@ -1087,6 +1182,7 @@ class MainWindow(QtWidgets.QMainWindow):
         shape.fill_color = QtGui.QColor(r, g, b, 128)
         shape.select_line_color = QtGui.QColor(255, 255, 255)
         shape.select_fill_color = QtGui.QColor(r, g, b, 155)
+        self.setLabelDockTitle()
 
     def _get_rgb_by_label(self, label):
         if self._config['shape_color'] == 'auto':
@@ -1105,6 +1201,7 @@ class MainWindow(QtWidgets.QMainWindow):
         for shape in shapes:
             item = self.labelList.findItemByShape(shape)
             self.labelList.removeItem(item)
+        self.setLabelDockTitle()
 
     def loadShapes(self, shapes, replace=True):
         self._noSelectionSlot = True
@@ -1113,11 +1210,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.labelList.clearSelection()
         self._noSelectionSlot = False
         self.canvas.loadShapes(shapes, replace=replace)
+        self.setLabelDockTitle()
 
     def loadLabels(self, shapes):
         s = []
         for shape in shapes:
             label = shape['label']
+            if self.isGroundTruthBuilderMode and 'source' in shape:
+                source = shape['source']
+            else:
+                source = None
             points = shape['points']
             shape_type = shape['shape_type']
             flags = shape['flags']
@@ -1142,6 +1244,8 @@ class MainWindow(QtWidgets.QMainWindow):
             shape.flags = default_flags
             shape.flags.update(flags)
             shape.other_data = other_data
+            if source:
+                shape.source = source
 
             s.append(shape)
         self.loadShapes(s)
@@ -1168,7 +1272,12 @@ class MainWindow(QtWidgets.QMainWindow):
             ))
             return data
 
-        shapes = [format_shape(item.shape()) for item in self.labelList]
+        shapes = [format_shape(item.shape())
+                          for item in self.labelList
+                          if not (self.isGroundTruthBuilderMode and 
+                                  hasattr(item.shape(), 'source') and 
+                                  item.shape().source != 'Ground Truth')
+                 ]
         flags = {}
         for i in range(self.flag_widget.count()):
             item = self.flag_widget.item(i)
@@ -1404,10 +1513,44 @@ class MainWindow(QtWidgets.QMainWindow):
             prev_shapes = self.canvas.shapes
         self.canvas.loadPixmap(QtGui.QPixmap.fromImage(image))
         flags = {k: False for k in self._config['flags'] or []}
+        shapes = []
         if self.labelFile:
-            self.loadLabels(self.labelFile.shapes)
+            for s in self.labelFile.shapes:
+                shapes.append(s)
             if self.labelFile.flags is not None:
                 flags.update(self.labelFile.flags)
+        # Display additional labels if needed.  Assume image is the same for all label files selected
+        if self.isGroundTruthBuilderMode:
+            for s in shapes:
+                s['source'] = "Ground Truth"
+            gt_grp = self.dfAllImages['Ground Truth Group'].loc[filename]
+            addl_files = self.dfAllImages[(self.dfAllImages['Ground Truth Group'] == gt_grp)
+                                           & (~self.dfAllImages['Is Ground Truth'])].index
+            for filename_addl in addl_files:
+                label_file_addl = user_extns.imgFileToLabelFileName(filename_addl, self.output_dir)
+                labelFile_addl = None
+                if QtCore.QFile.exists(label_file_addl) and \
+                        LabelFile.is_label_file(label_file_addl):
+                    try:
+                        labelFile_addl = LabelFile(label_file_addl)
+                    except LabelFileError as e:
+                        self.errorMessage(
+                            self.tr('Error opening file'),
+                            self.tr(
+                                "<p><b>%s</b></p>"
+                                "<p>Make sure <i>%s</i> is a valid label file."
+                            ) % (e, label_file_addl)
+                        )
+                        self.status(self.tr("Error reading %s") % label_file_addl)
+                        return False
+                if labelFile_addl:
+                    for s in labelFile_addl.shapes:
+                        s['source'] = self.dfAllImages['Image Folder'].loc[filename_addl]
+                        shapes.append(s)
+                    if labelFile_addl.flags is not None:
+                        #TODO Test flags from multiple annotations
+                        flags.update(labelFile_addl.flags)
+        self.loadLabels(shapes)
         self.loadFlags(flags)
         if self._config['keep_prev'] and self.noShapes():
             self.loadShapes(prev_shapes, replace=False)
@@ -1786,7 +1929,17 @@ class MainWindow(QtWidgets.QMainWindow):
             lst.append(item.text())
         return lst
 
+    # TODO If self.scanAllImages takes too long, only perform this if needed.  E.g. if filtering, or switching GroundTruthMode, not needed.
     def importDirImages(self, dirpath, pattern=None, load=True):
+        
+        def parse_img_path(file_path):
+            parts = pathlib.Path(file_path).parts
+            file_path = parts[-1]
+            gt_grp = file_path
+            for fn in self.gt_grp_transforms:
+                gt_grp = fn(gt_grp)
+            return [parts[-2], file_path, gt_grp] 
+
         self.actions.openNextImg.setEnabled(True)
         self.actions.openPrevImg.setEnabled(True)
 
@@ -1796,7 +1949,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lastOpenDir = dirpath
         self.filename = None
         self.fileListWidget.clear()
-        for filename in self.scanAllImages(dirpath):
+        all_images = self.scanAllImages(dirpath)
+        if self.isGroundTruthBuilderMode:
+            self.dfAllImages.drop(self.dfAllImages.index, inplace=True)
+            df = self.dfAllImages
+            #TODO Find more elegant way of setting index before adding data
+            df['Image Folder'] = [None for i in range(len(all_images))]
+            df.index = all_images
+            # row.name in the apply function below is the index of the row being processed
+            df[['Image Folder','File Name', 'Ground Truth Group']] = df.apply(lambda row:parse_img_path(row.name), 
+                                                        axis = 1, result_type = 'expand')
+            df['Is Ground Truth'] = df['Image Folder'].str.upper() == self.groundTruthDirName.upper()
+            self.dfAllImages = df
+        for filename in all_images:
             if pattern and pattern not in filename:
                 continue
             # TODO:  Support XML and other label file formats
@@ -1805,6 +1970,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     LabelFile.is_label_file(label_file)
             if not self.showLabeledCheckbox.isChecked() and good_label_file:
                 continue
+            if self.isGroundTruthBuilderMode:
+                if not self.dfAllImages['Is Ground Truth'].loc[filename]:
+                    continue
             item = QtWidgets.QListWidgetItem(filename)
             item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             if good_label_file:
@@ -1884,7 +2052,19 @@ class MainWindow(QtWidgets.QMainWindow):
     def launchExternalViewer(self):
         user_extns.launchExternalViewer(self.filename)
 
-    def compareAnnotations(self):
-        win = CompareWindow(self)
-        win.raise_()
-        win.show()
+    def groundTruthBuilderMode(self):
+        self.setupGroundTruthBuilder()
+        
+    def setupGroundTruthBuilder(self, refreshImageList=True):
+        self.isGroundTruthBuilderMode = self.actions.groundTruthBuilderMode.isChecked()
+        self.annotator_dock.setVisible(self.isGroundTruthBuilderMode)
+        if refreshImageList:
+            self.importDirImages(self.lastOpenDir)
+            
+    def dispSettings(self):
+        msg =  f'Output dir={self.output_dir}\n'
+        msg += f'Input dir={self.filename}\n'
+        msg += f'Last opened dir={self.lastOpenDir}\n'
+        user_extns.dispMsgBox(msg)
+    
+    
