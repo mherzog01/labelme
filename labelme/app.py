@@ -38,6 +38,7 @@ from labelme.widgets import ZoomWidget
 import PIL 
 from PIL import Image
 
+#import cProfile
 
 #TODO:
 #1.	*Refresh file list every 1 sec
@@ -220,6 +221,8 @@ class MainWindow(QtWidgets.QMainWindow):
         
         #TODO Get from Config File
         self.groundTruthDirName = 'Ground Truth'
+        self.groundTruthOpacity = 255
+        self.groundTruthOpacityOther = 50
         
         annotatorListWidget = QtWidgets.QWidget()
         annotatorListWidget.setLayout(annotatorListLayout)
@@ -727,6 +730,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 action('&Move here', self.moveShape),
             ),
         )
+        # TODO "Copy Here" function does not seem to work.  Displays a new object, but doesn't actually create the object
 
         self.tools = self.toolbar('Tools')
         # Menu buttons on Left
@@ -906,6 +910,8 @@ class MainWindow(QtWidgets.QMainWindow):
             action.setEnabled(value)
 
     def canvasShapeEdgeSelected(self, selected, shape):
+        if self.canvas.shapeIsLocked(shape):
+            return
         self.actions.addPointToEdge.setEnabled(
             selected and shape and shape.canAddPoint()
         )
@@ -1127,6 +1133,7 @@ class MainWindow(QtWidgets.QMainWindow):
             filename = self.imageList[currIndex]
             if filename:
                 self.loadFile(filename)
+                #cProfile.runctx(fr'self.loadFile(r"{filename}")',globals(),locals(), filename=r'c:\tmp\profile.txt')
 
     # React to canvas signals.
     def shapeSelectionChanged(self, selected_shapes):
@@ -1147,11 +1154,24 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.edit.setEnabled(n_selected == 1)
 
     def getShapeDisplayLabel(self, shape):
-        text = f'{shape.label}'
-        if shape.group_id:
-            text += f' ({shape.group_id})'
-        if hasattr(shape,'source') and not shape.source is None:
-            text += f' ({shape.source})'
+        source = None
+        group_id = None
+        if type(shape).__name__ == 'dict':
+            label = shape['label']
+            if 'group_id' in shape:
+                group_id = shape['group_id']
+            if 'source' in shape:
+                source = shape['source']
+        else:  #object
+            label = shape.label
+            group_id = shape.group_id
+            if hasattr(shape,'source'):
+                source = shape.source
+        text = f'{label}'
+        if group_id:
+            text += f' ({group_id})'
+        if source:
+            text += f' ({source})'
         return text
 
     def addLabel(self, shape):
@@ -1176,11 +1196,15 @@ class MainWindow(QtWidgets.QMainWindow):
             '{} <font color="#{:02x}{:02x}{:02x}">●</font>'
             .format(text, r, g, b)
         )
-        shape.line_color = QtGui.QColor(r, g, b)
-        shape.vertex_fill_color = QtGui.QColor(r, g, b)
-        shape.hvertex_fill_color = QtGui.QColor(255, 255, 255)
+        if hasattr(shape,'opacity'):
+            opacity=shape.opacity
+        else:
+            opacity=255
+        shape.line_color = QtGui.QColor(r, g, b, opacity)
+        shape.vertex_fill_color = QtGui.QColor(r, g, b, opacity)
+        shape.hvertex_fill_color = QtGui.QColor(255, 255, 255, opacity)
         shape.fill_color = QtGui.QColor(r, g, b, 128)
-        shape.select_line_color = QtGui.QColor(255, 255, 255)
+        shape.select_line_color = QtGui.QColor(255, 255, 255, opacity)
         shape.select_fill_color = QtGui.QColor(r, g, b, 155)
         self.setLabelDockTitle()
 
@@ -1216,10 +1240,17 @@ class MainWindow(QtWidgets.QMainWindow):
         s = []
         for shape in shapes:
             label = shape['label']
+            # Temporary attributes.  If 'source' is defined, assume others are as well
             if self.isGroundTruthBuilderMode and 'source' in shape:
                 source = shape['source']
+                opacity = shape['opacity']
+                locked = shape['locked']
+                disp_label = shape['disp_label']
             else:
                 source = None
+                opacity = None
+                locked = False
+                disp_label = self.getShapeDisplayLabel(shape)
             points = shape['points']
             shape_type = shape['shape_type']
             flags = shape['flags']
@@ -1230,6 +1261,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 label=label,
                 shape_type=shape_type,
                 group_id=group_id,
+                locked=locked,
             )
             for x, y in points:
                 shape.addPoint(QtCore.QPointF(x, y))
@@ -1246,6 +1278,9 @@ class MainWindow(QtWidgets.QMainWindow):
             shape.other_data = other_data
             if source:
                 shape.source = source
+                shape.opacity = opacity
+                shape.locked = locked
+                shape.disp_label = disp_label
 
             s.append(shape)
         self.loadShapes(s)
@@ -1521,8 +1556,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 flags.update(self.labelFile.flags)
         # Display additional labels if needed.  Assume image is the same for all label files selected
         if self.isGroundTruthBuilderMode:
+            #logger.debug('Loading ground truth data')
             for s in shapes:
                 s['source'] = "Ground Truth"
+                s['opacity'] = self.groundTruthOpacity
+                s['locked'] = False
+                s['disp_label'] = self.getShapeDisplayLabel(s)
             gt_grp = self.dfAllImages['Ground Truth Group'].loc[filename]
             addl_files = self.dfAllImages[(self.dfAllImages['Ground Truth Group'] == gt_grp)
                                            & (~self.dfAllImages['Is Ground Truth'])].index
@@ -1532,7 +1571,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 if QtCore.QFile.exists(label_file_addl) and \
                         LabelFile.is_label_file(label_file_addl):
                     try:
-                        labelFile_addl = LabelFile(label_file_addl)
+                        labelFile_addl = LabelFile(label_file_addl, loadImage=False)
                     except LabelFileError as e:
                         self.errorMessage(
                             self.tr('Error opening file'),
@@ -1546,6 +1585,9 @@ class MainWindow(QtWidgets.QMainWindow):
                 if labelFile_addl:
                     for s in labelFile_addl.shapes:
                         s['source'] = self.dfAllImages['Image Folder'].loc[filename_addl]
+                        s['opacity'] = self.groundTruthOpacityOther
+                        s['locked'] = True
+                        s['disp_label'] = self.getShapeDisplayLabel(s)
                         shapes.append(s)
                     if labelFile_addl.flags is not None:
                         #TODO Test flags from multiple annotations
