@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 # TODO:  Enter key on keypad doesn't stop Polygon drawing
-
+ 
 import functools
 import os
 import os.path as osp
