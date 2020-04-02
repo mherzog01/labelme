@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 
-# TODO:  Enter key on keypad doesn't stop Polygon drawing
- 
 import functools
 import os
 import os.path as osp
@@ -56,10 +54,14 @@ from PIL import Image
 #11.	**Poor performance loading images
 #12.	When in insert mode, highlight polygon if select an entry in the Polygon Labels list
 #13.	*Rotate picture
-#14.	*After save, stays in create mode.  
 #15.	 * Remember last input and output folders
-#16.	Enter on keypad causes polygons to be selected/completed
-
+#16.	Enter on keypad does not cause polygons to be selected/completed
+#17.  Ability to view folders (input, output) in Explorer.  Use code in Tools/exportByLot
+#18.  If shape has a flag, make a different color or different outline (dash instead of lines?)
+#19.  By default, hide flags and unique label docks
+#20.  Update Tutorial 
+#21.  Propose merge with source fork.  Update GitHub doc.
+#22.  When zoom with control keys, lose center of viewing area
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -70,6 +72,28 @@ from PIL import Image
 # - [low,maybe] Open images with drag & drop.
 # - [low,maybe] Preview images on file dialogs.
 # - Zoom is too "steppy".
+
+# TODO(Ground Truth Tool):
+# - ** Remove hardcodes - get data from Ground Truth config file
+#     > Default name:  "Annotation Session Groups.txt"
+#     > Option to load a different file name
+# - For non-GT shapes, use dotted lines?
+# - Ability to copy a non-GT shape and paste.  Right now, pasted shape is locked.
+# - Option to create GT from aggregate of selected shapes
+# - Ability to edit current "Annotation Session Groups" file (in Notepad)
+# - Test - if change output dir
+# - Hide annotation dock by default
+# - Turn off shapes in shape list by Annotator or defect.  Use text entry instead of annotation dock?
+# - * Complete locking of non-GT shapes:
+#     > Don't allow Delete key 
+#     > Don't show context menus except copy
+#     > Check double click behavior
+# - If switch mode, apply filter to file list
+# - *** Create installation procedure
+# - Calc IoU.  Weight IoU based on size of Ground Truth (use shapely)
+# - Add GT to ./testing scripts
+# - If delete label file, in GT mode don't hide image - continue to show existing annotations
+
 
 
 LABEL_COLORMAP = imgviz.label_colormap(value=200)
@@ -121,7 +145,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.labelList = LabelListWidget()
         self.lastOpenDir = None
 
-        # ----------------------------------------------------        
+        # ====================================================
         # -------- Dock windows - begin definitions ----------
         # ----------------------------------------------------        
         
@@ -223,6 +247,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.groundTruthDirName = 'Ground Truth'
         self.groundTruthOpacity = 255
         self.groundTruthOpacityOther = 50
+        #TODO Ensure groundTruthDirName exists
         
         annotatorListWidget = QtWidgets.QWidget()
         annotatorListWidget.setLayout(annotatorListLayout)
@@ -230,7 +255,7 @@ class MainWindow(QtWidgets.QMainWindow):
 		
         # ----------------------------------------------------        
         # -------- Dock windows - end definition--------------
-        # ----------------------------------------------------        
+        # ====================================================
 
         self.zoomWidget = ZoomWidget()
 
@@ -901,6 +926,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self.actions.deleteFile.setEnabled(True)
         else:
             self.actions.deleteFile.setEnabled(False)
+            
+        # TODO Set state to the mode when application begins, which is neither Edit mode or Create mode.  Or, go into Edit mode upon initialization
+        self.setEditMode()
 
     def toggleActions(self, value=True):
         """Enable/Disable widgets which depend on an opened image."""
@@ -1156,6 +1184,8 @@ class MainWindow(QtWidgets.QMainWindow):
     def getShapeDisplayLabel(self, shape):
         source = None
         group_id = None
+        # TODO When import shape info from .json, create a "shape" object, instead of just a "dict".
+        #      - This will be a lot of work, but will avoid having to translate between dict and object formats
         if type(shape).__name__ == 'dict':
             label = shape['label']
             if 'group_id' in shape:
@@ -1357,6 +1387,13 @@ class MainWindow(QtWidgets.QMainWindow):
         added_shapes = self.canvas.copySelectedShapes()
         self.labelList.clearSelection()
         for shape in added_shapes:
+            #TODO See note in getShapeDisplayLabel regarding shape object vs dict
+            if self.canvas.shapeIsLocked(shape):
+                shape.source = self.groundTruthDirName
+                shape.opacity = self.groundTruthOpacity
+                shape.locked = False
+                shape.disp_label = self.getShapeDisplayLabel(shape)
+                self.canvas.repaint()
             self.addLabel(shape)
         self.setDirty()
 
@@ -1558,7 +1595,7 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.isGroundTruthBuilderMode:
             #logger.debug('Loading ground truth data')
             for s in shapes:
-                s['source'] = "Ground Truth"
+                s['source'] = self.groundTruthDirName
                 s['opacity'] = self.groundTruthOpacity
                 s['locked'] = False
                 s['disp_label'] = self.getShapeDisplayLabel(s)
@@ -2101,7 +2138,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.isGroundTruthBuilderMode = self.actions.groundTruthBuilderMode.isChecked()
         self.annotator_dock.setVisible(self.isGroundTruthBuilderMode)
         if refreshImageList:
-            self.importDirImages(self.lastOpenDir)
+            self.refreshDirImages()
             
     def dispSettings(self):
         msg =  f'Output dir={self.output_dir}\n'
