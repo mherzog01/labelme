@@ -76,7 +76,16 @@ from PIL import Image
 # TODO(Ground Truth Tool):
 # - ** Remove hardcodes - get data from Ground Truth config file
 #     > Default name:  "Annotation Session Groups.txt"
+#     > Format:
+#           SME:./SME*
+#           Techs:./Tech*
+#           Ground Truth:./Ground Truth 
 #     > Option to load a different file name
+# - Options to select folders:
+#     SME
+#     Tech
+#     All Defined (from config file)
+#     All folders
 # - For non-GT shapes, use dotted lines?
 # - Ability to copy a non-GT shape and paste.  Right now, pasted shape is locked.
 # - Option to create GT from aggregate of selected shapes
