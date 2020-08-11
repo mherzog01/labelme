@@ -161,7 +161,8 @@ def launchExternalViewer(filename):
     os.system(cmd)
     print('after')
     
-    
+
+# Exports a separate single-bit file for each image/defect combination    
 def exportAnnotationsForImage(img_file, label_dir):
     
     export_folder = r'c:\tmp\annotation_exports'
@@ -186,7 +187,7 @@ def exportAnnotationsForImage(img_file, label_dir):
         pixmap = QtGui.QPixmap(img_file)
         pixmap.fill(QtGui.QColor(0,0,0))
         # Paint annotations
-        # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.)
+        # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
         p = QtGui.QPainter(pixmap)
         for s in shapes_to_export:
             s_obj = Shape(label=s['label'], shape_type=s['shape_type'],
@@ -199,7 +200,7 @@ def exportAnnotationsForImage(img_file, label_dir):
             s_obj.paint(p)
         p.end()
         img_to_export = pixmap.toImage()
-        img_to_export.convertTo(QtGui.QImage.Format_Indexed8)
+        img_to_export.convertToFormat(QtGui.QImage.Format_Indexed8)
         
         targ_file = export_basepath + f'_{label.replace("/","")}.png'
         #TODO Move to PIL without saving to disk in order 

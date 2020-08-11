@@ -7,6 +7,7 @@ import pathlib
 import re
 import webbrowser
 import pandas as pd
+import numpy as np
 
 import imgviz
 from qtpy import QtCore
@@ -105,7 +106,23 @@ from PIL import Image
 
 
 
-LABEL_COLORMAP = imgviz.label_colormap(value=200)
+# LABEL_COLORMAP = imgviz.label_colormap(value=200)
+
+# Exclude colors too close to the color of tissue (e.g. [200,200,200])
+# TODO Clean up -- move to a function and make pythonic - remove hardcodes and reduce back and forth between lists and numpy arrays
+label_colormap_orig = imgviz.label_colormap(value=200)
+LABEL_COLORMAP = []
+# Preserve order
+for c in label_colormap_orig:
+    # Exclude colors too close to the color of tissue [200,200,200]
+    # TODO Make soft
+    if all(abs(c - np.array([200,200,200])) < np.array([50,50,50])):
+        continue
+    c_l = list(c)
+    if c_l in LABEL_COLORMAP:
+        continue
+    LABEL_COLORMAP += [c_l]
+LABEL_COLORMAP = np.array(LABEL_COLORMAP)
 
 
 class MainWindow(QtWidgets.QMainWindow):

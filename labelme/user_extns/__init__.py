@@ -6,3 +6,4 @@ from .tools import imgFileToLabelFileName
 from .tools import create_connection
 from .tools import dispMsgBox
 from .tools import inputdialog
+from .tools import exportAnnotationsForImage
