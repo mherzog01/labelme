@@ -171,6 +171,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.labelList = LabelListWidget()
         self.lastOpenDir = None
 
+        # -------------------------------        
+        # Set Styles
+        # - set button style to look like links
+        # https://stackoverflow.com/questions/19161119/using-hover-and-pressed-stylesheet-qt
+        self.setStyleSheet('QPushButton {border: 0px;text-decoration:underline;color:blue} QPushButton:hover {font-weight:bold}')
+
         # ====================================================
         # -------- Dock windows - begin definitions ----------
         # ----------------------------------------------------        
@@ -223,11 +229,23 @@ class MainWindow(QtWidgets.QMainWindow):
         fileListLayout.setSpacing(0)
         fileListLayout.addWidget(self.fileSearch)
         fileListLayout.addWidget(self.fileListWidget)
+
+        fileListCtrlsLayout = QtWidgets.QHBoxLayout()
         self.showLabeledCheckbox = QtWidgets.QCheckBox('Show Labeled')
-        fileListLayout.addWidget(self.showLabeledCheckbox)
+        fileListCtrlsLayout.addWidget(self.showLabeledCheckbox)
         self.showLabeledCheckbox.stateChanged.connect(self.refreshDirImages)        
+
+        self.exportData = QtWidgets.QPushButton('Export')
+        fileListCtrlsLayout.addWidget(self.exportData)
+        self.exportData.clicked.connect(self.exportDataToExcel)        
+
+        self.loadSelected = QtWidgets.QPushButton('Load Selected')
+        fileListCtrlsLayout.addWidget(self.loadSelected)
+        self.loadSelected.clicked.connect(self.loadDataFromExcel)        
+
+        fileListLayout.addLayout(fileListCtrlsLayout)
         
-        self.file_dock = QtWidgets.QDockWidget(self.tr(u'File List'), self)
+        self.file_dock = QtWidgets.QDockWidget(self.getFileDockTitle(), self)
         self.file_dock.setObjectName(u'Files')
         fileListWidget = QtWidgets.QWidget()
         fileListWidget.setLayout(fileListLayout)
@@ -973,8 +991,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def queueEvent(self, function):
         QtCore.QTimer.singleShot(0, function)
 
-    def status(self, message, delay=5000):
+    def status(self, message, delay=5000, print_msg=False):
         self.statusBar().showMessage(message, delay)
+        if print_msg:
+            print(message)
 
     def resetState(self):
         self.labelList.clear()
@@ -1006,6 +1026,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def setLabelDockTitle(self):
         self.shape_dock.setWindowTitle(self.getLabelDockTitle())
+
+    def getFileDockTitle(self):
+        base_title = self.tr(u'File List')
+        if not self.imageList:
+            return base_title
+        return f'{base_title} - # files: {len(self.imageList)}'
+
+    def setFileDockTitle(self):
+        self.file_dock.setWindowTitle(self.getFileDockTitle())
 
 
     # Callbacks
@@ -2035,7 +2064,7 @@ class MainWindow(QtWidgets.QMainWindow):
         return lst
 
     # TODO If self.scanAllImages takes too long, only perform this if needed.  E.g. if filtering, or switching GroundTruthMode, not needed.
-    def importDirImages(self, dirpath, pattern=None, load=True):
+    def importDirImages(self, dirpath, pattern=None, load=True, all_images=None):
         
         def parse_img_path(file_path):
             parts = pathlib.Path(file_path).parts
@@ -2054,7 +2083,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.lastOpenDir = dirpath
         self.filename = None
         self.fileListWidget.clear()
-        all_images = self.scanAllImages(dirpath)
+        if all_images is None:
+            all_images = self.scanAllImages(dirpath)
         if self.isGroundTruthBuilderMode:
             self.dfAllImages.drop(self.dfAllImages.index, inplace=True)
             df = self.dfAllImages
@@ -2086,6 +2116,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 item.setCheckState(Qt.Unchecked)
             self.fileListWidget.addItem(item)
         self.openNextImg(load=load)
+        self.setFileDockTitle()
 
     def scanAllImages(self, folderPath):
         extensions = ['.%s' % fmt.data().decode("ascii").lower()
@@ -2172,4 +2203,92 @@ class MainWindow(QtWidgets.QMainWindow):
         msg += f'Last opened dir={self.lastOpenDir}\n'
         user_extns.dispMsgBox(msg)
     
-    
+    def exportDataToExcel(self):
+
+        def get_flag_value(flag_dict, flag_key):
+            return (flag_key in flag_dict and flag_dict[flag_key])
+
+        # TODO - display errors/status to user, not to console
+        
+        # Assume:
+        #   - List of img_files contain all images captured for the applicable day
+        #   - Label_dir has annotation data (.json files) for all files in img_files
+        #   - Files in img_files correspond to entries in the DB in DB_FILE
+        #    
+        # Ensure that Files in img_files correspond to entries in the DB in DB_FILE
+        df_annot = pd.DataFrame(columns=['image_path',
+                                         'annot_num',
+                                         'label',
+                                         'group_id',
+                                         'not_in_picture',
+                                         'not_in_tissue',
+                                         'review_recommended',
+                                         'rework'])
+        df_annot.astype({'image_path':str,
+                                         'annot_num':int,
+                                         'label':str,
+                                         'group_id':int,
+                                         'not_in_picture':bool,
+                                         'not_in_tissue':bool,
+                                         'review_recommended':bool,
+                                         'rework':bool})
+            
+        for img_file in self.imageList:
+            
+            #img_date = datetime.datetime.strptime(row[0].split(' ')[0],'%Y-%m-%d')
+                
+            self.status(f'File {img_file}.', print_msg=True)
+            label_file = user_extns.imgFileToLabelFileName(img_file, self.output_dir)
+            if not osp.exists(label_file):
+                self.status(f'ERROR:  No label file {label_file} found for image file {img_file}.', print_msg=True)
+                continue
+            #img_basename = osp.basename(img_file)
+            labelFile = LabelFile(label_file, loadImage=False)    
+            #img_unique_labels = set([shape['label'] for shape in labelFile.shapes])
+            #print(f'File {img_file}.  img_unique_labels={img_unique_labels}')
+            annot_num = 0
+            for shape in labelFile.shapes:
+                annot_num += 1 
+                flag_dict = shape['flags']
+                label = shape['label']
+                group_id = shape['group_id']
+                not_in_picture = get_flag_value(flag_dict, 'Not in picture')
+                not_in_tissue = get_flag_value(flag_dict, 'Not in tissue')
+                review_recommended = get_flag_value(flag_dict, 'Review recommended')
+                rework = get_flag_value(flag_dict, 'Rework')
+                #break
+                df_annot.loc[len(df_annot)] = {'image_path':img_file,
+                                         'annot_num':annot_num,
+                                         'label':label,
+                                         'group_id':group_id,
+                                         'not_in_picture':not_in_picture,
+                                         'not_in_tissue':not_in_tissue,
+                                         'review_recommended':review_recommended,
+                                         'rework':rework}
+            if annot_num == 0:
+                df_annot.loc[len(df_annot),'image_path'] = img_file
+                       
+        #https://stackoverflow.com/questions/34275782/how-to-get-desktop-location        
+        annot_xlsx = osp.join(os.environ["HOMEPATH"],'desktop','Annotations.xlsx')
+        df_annot['Selected'] = None
+        df_annot.to_excel(annot_xlsx)    
+        num_images = len(df_annot['image_path'].unique())
+        self.status(f'Export complete to {annot_xlsx}.  # images={num_images}.  # annot={len(df_annot)}.', print_msg=True)
+        
+
+    def loadDataFromExcel(self):
+        annot_xlsx = osp.join(os.environ["HOMEPATH"],'desktop','Annotations.xlsx')
+        #TODO Read index column as the index, not a data column
+        df_annot = pd.read_excel(annot_xlsx)
+        df_annot.loc[df_annot['Selected'].isnull(),'Selected'] = ''
+        df_annot.loc[df_annot['Selected'] == float('nan'),'Selected'] = ''
+        df_annot['Selected'] = df_annot['Selected'].map(lambda x:str(x).strip())
+        df_annot.drop(df_annot[df_annot['image_path'].isna()].index,inplace=True)
+        
+        df_selected = df_annot[df_annot['Selected'] > '']
+        img_list = df_selected['image_path'].unique().tolist()
+        num_images = len(img_list)
+        self.status(f'Read {num_images} images, {len(df_selected)} defects.', print_msg=True)
+        
+        self.showLabeledCheckbox.setChecked(True)
+        self.importDirImages(self, self.lastOpenDir, all_images=img_list)
