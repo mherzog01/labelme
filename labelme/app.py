@@ -175,7 +175,11 @@ class MainWindow(QtWidgets.QMainWindow):
         # Set Styles
         # - set button style to look like links
         # https://stackoverflow.com/questions/19161119/using-hover-and-pressed-stylesheet-qt
-        self.setStyleSheet('QPushButton {border: 0px;text-decoration:underline;color:blue} QPushButton:hover {font-weight:bold}')
+        export_button_style_sheet = 'QPushButton#exportData { border: 0px; text-decoration: underline; color: blue }'
+        export_button_style_sheet += 'QPushButton#exportData:hover { font-weight: bold }'
+        export_button_style_sheet += 'QPushButton#loadSelected { border: 0px; text-decoration: underline; color: blue }' 
+        export_button_style_sheet += 'QPushButton#loadSelected:hover { font-weight: bold }'
+        self.setStyleSheet(export_button_style_sheet)  
 
         # ====================================================
         # -------- Dock windows - begin definitions ----------
@@ -234,12 +238,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.showLabeledCheckbox = QtWidgets.QCheckBox('Show Labeled')
         fileListCtrlsLayout.addWidget(self.showLabeledCheckbox)
         self.showLabeledCheckbox.stateChanged.connect(self.refreshDirImages)        
-
+        
         self.exportData = QtWidgets.QPushButton('Export')
+        self.exportData.setObjectName('exportData')
         fileListCtrlsLayout.addWidget(self.exportData)
         self.exportData.clicked.connect(self.exportDataToExcel)        
 
         self.loadSelected = QtWidgets.QPushButton('Load Selected')
+        self.loadSelected.setObjectName('loadSelected')
         fileListCtrlsLayout.addWidget(self.loadSelected)
         self.loadSelected.clicked.connect(self.loadDataFromExcel)        
 
@@ -2205,79 +2211,24 @@ class MainWindow(QtWidgets.QMainWindow):
     
     def exportDataToExcel(self):
 
-        def get_flag_value(flag_dict, flag_key):
-            return (flag_key in flag_dict and flag_dict[flag_key])
-
-        # TODO - display errors/status to user, not to console
-        
-        # Assume:
-        #   - List of img_files contain all images captured for the applicable day
-        #   - Label_dir has annotation data (.json files) for all files in img_files
-        #   - Files in img_files correspond to entries in the DB in DB_FILE
-        #    
-        # Ensure that Files in img_files correspond to entries in the DB in DB_FILE
-        df_annot = pd.DataFrame(columns=['image_path',
-                                         'annot_num',
-                                         'label',
-                                         'group_id',
-                                         'not_in_picture',
-                                         'not_in_tissue',
-                                         'review_recommended',
-                                         'rework'])
-        df_annot.astype({'image_path':str,
-                                         'annot_num':int,
-                                         'label':str,
-                                         'group_id':int,
-                                         'not_in_picture':bool,
-                                         'not_in_tissue':bool,
-                                         'review_recommended':bool,
-                                         'rework':bool})
+        def stat_callback(msg):
+            self.status(msg, print_msg=True)
+            QtWidgets.QApplication.processEvents()
             
-        for img_file in self.imageList:
             
-            #img_date = datetime.datetime.strptime(row[0].split(' ')[0],'%Y-%m-%d')
-                
-            self.status(f'File {img_file}.', print_msg=True)
-            label_file = user_extns.imgFileToLabelFileName(img_file, self.output_dir)
-            if not osp.exists(label_file):
-                self.status(f'ERROR:  No label file {label_file} found for image file {img_file}.', print_msg=True)
-                continue
-            #img_basename = osp.basename(img_file)
-            labelFile = LabelFile(label_file, loadImage=False)    
-            #img_unique_labels = set([shape['label'] for shape in labelFile.shapes])
-            #print(f'File {img_file}.  img_unique_labels={img_unique_labels}')
-            annot_num = 0
-            for shape in labelFile.shapes:
-                annot_num += 1 
-                flag_dict = shape['flags']
-                label = shape['label']
-                group_id = shape['group_id']
-                not_in_picture = get_flag_value(flag_dict, 'Not in picture')
-                not_in_tissue = get_flag_value(flag_dict, 'Not in tissue')
-                review_recommended = get_flag_value(flag_dict, 'Review recommended')
-                rework = get_flag_value(flag_dict, 'Rework')
-                #break
-                df_annot.loc[len(df_annot)] = {'image_path':img_file,
-                                         'annot_num':annot_num,
-                                         'label':label,
-                                         'group_id':group_id,
-                                         'not_in_picture':not_in_picture,
-                                         'not_in_tissue':not_in_tissue,
-                                         'review_recommended':review_recommended,
-                                         'rework':rework}
-            if annot_num == 0:
-                df_annot.loc[len(df_annot),'image_path'] = img_file
-                       
-        #https://stackoverflow.com/questions/34275782/how-to-get-desktop-location        
-        annot_xlsx = osp.join(os.environ["HOMEPATH"],'desktop','Annotations.xlsx')
+        df_annot = user_extns.getAnnotDf(self.imageList, stat_callback)
+        # TODO - display errors/status to user, not just to status bar
+        # TODO - display status asynchronously - doesn't display while processing
+                               
+        annot_xlsx = osp.join(user_extns.getDesktop(),'Annotations.xlsx')
         df_annot['Selected'] = None
         df_annot.to_excel(annot_xlsx)    
         num_images = len(df_annot['image_path'].unique())
-        self.status(f'Export complete to {annot_xlsx}.  # images={num_images}.  # annot={len(df_annot)}.', print_msg=True)
+        stat_callback(f'Export complete to {annot_xlsx}.  # images={num_images}.  # annot={len(df_annot)}.')
         
 
     def loadDataFromExcel(self):
-        annot_xlsx = osp.join(os.environ["HOMEPATH"],'desktop','Annotations.xlsx')
+        annot_xlsx = osp.join(user_extns.getDesktop(),'Annotations.xlsx')
         #TODO Read index column as the index, not a data column
         df_annot = pd.read_excel(annot_xlsx)
         df_annot.loc[df_annot['Selected'].isnull(),'Selected'] = ''
