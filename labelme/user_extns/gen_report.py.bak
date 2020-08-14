@@ -71,12 +71,15 @@ def get_defect_intensity(group_id):
 #------------------------------------------
 # Settings
 module_folder = osp.dirname(__file__)
-export_folder = osp.join(module_folder, 'annotation_exports')
 template_path = osp.join(module_folder,'rpt01_template.html')
 label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
+export_root = osp.join(label_dir, '..','..','util','export_images')
+export_img_dir = osp.join(export_root,'annotation_exports')
+export_singe_annot_dir = osp.join(export_root,'annotation_exports')
 #label_dir = r'c:\tmp\work4'
 selection_margin = 100  # Number of pixels that surround the selected area of the image
 create_img_exports = ['all','new','none'][1]  
+create_singe_annot_exports [ 'all','none'][0]
 #------------------------------------------
 
 # The report depends on current state of image annotations, so prior versions may not have integrity

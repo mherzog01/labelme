@@ -9,3 +9,5 @@ from .tools import inputdialog
 from .tools import exportAnnotationsForImage
 from .tools import getAnnotDf
 from .tools import getDesktop
+from .tools import get_colormap
+from .tools import AnnotDf

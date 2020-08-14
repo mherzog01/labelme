@@ -10,8 +10,11 @@ from labelme import user_extns
 from labelme.shape import Shape
 from labelme import LabelFile
 
+import imgviz
+
 import os
 import os.path as osp
+import types
 
 from qtpy import QtCore, QtWidgets, QtGui
 from qtpy.QtWidgets import QWidget
@@ -23,6 +26,7 @@ from PyQt5.QtWidgets import QApplication
 import sys
 import glob
 import pandas as pd
+import numpy as np
 
 import tempfile
 import shutil
@@ -263,16 +267,28 @@ class AnnotDf():
                               'annot_num':int,
                               'label':str,
                                         'group_id':int})
+        # By default, run silently.
+        # If status_callback = 'print', print the file name
+        # Otherwise, pass a function that takes a string as a parameter
+        #   e.g. def cb(msg):
+        #           print(f'In callback.  msg={msg}')
         self.status_callback = status_callback
+        
+        # Public status data
+        self.cur_image_path = None
+        self.cur_key = None
     
+    @property
+    def cur_image_basename(self):
+        return osp.basename(self.cur_image_path)
     
     #def get_flag_value(self, flag_dict, flag_key):
     #    return (flag_key in flag_dict and flag_dict[flag_key])
     
     def stat_msg(self, msg):
-        if self.status_callback:
+        if self.status_callback and isinstance(self.status_callback, types.FunctionType):
             self.status_callback(msg)
-        else:
+        elif self.status_callback == 'print':
             print(msg)
 
     def load_files(self, file_list):
@@ -281,12 +297,12 @@ class AnnotDf():
             
             #img_date = datetime.datetime.strptime(row[0].split(' ')[0],'%Y-%m-%d')
             self.stat_msg(f'File {img_file}.')
+            self.cur_image_path = img_file
             label_file = user_extns.imgFileToLabelFileName(img_file, osp.dirname(img_file))
             if not osp.exists(label_file):
                 self.load_shape(img_file)
                 #stat_msg(f'No label file {label_file} found for image file {img_file}.')
                 continue
-            #img_basename = osp.basename(img_file)
             labelFile = LabelFile(label_file, loadImage=False)    
             #img_unique_labels = set([shape['label'] for shape in labelFile.shapes])
             #print(f'File {img_file}.  img_unique_labels={img_unique_labels}')
@@ -319,9 +335,12 @@ class AnnotDf():
                    label = None,
                    group_id = None,
                    flag_dict = None):
-        key = len(self.df_annot)
+        self.cur_image_path = img_file
+        self.cur_key = len(self.df_annot)
+        
+        key = self.cur_key
         self.df_annot.loc[key, 'image_path'] = img_file
-        self.df_annot.loc[key, 'image_basename'] = osp.basename(img_file)
+        self.df_annot.loc[key, 'image_basename'] = self.cur_image_basename
         self.df_annot.loc[key, 'annot_num'] = annot_num
         self.df_annot.loc[key, 'label'] = label
         self.df_annot.loc[key, 'group_id'] = group_id
@@ -331,6 +350,24 @@ class AnnotDf():
                 # No need to create columns.  Assignment via .loc[key,col] creates if needed
                 #if not col_name in self.df_annot.columns:
                 self.df_annot.loc[key, col_name] = flag_dict[flag]
+    
+def get_colormap():
+    # TODO Make pythonic - remove hardcodes and reduce back and forth between lists and numpy arrays
+    label_colormap_orig = imgviz.label_colormap(value=200)
+    label_colormap_list = []
+    # Preserve order
+    for c in label_colormap_orig:
+        # Exclude colors too close to the color of tissue [200,200,200]
+        # TODO Make soft
+        if all(abs(c - np.array([200,200,200])) < np.array([50,50,50])):
+            continue
+        c_l = list(c)
+        if c_l in label_colormap_list:
+            continue
+        label_colormap_list += [c_l]
+    label_colormap_array = np.array(label_colormap_list)
+    return label_colormap_list
+    
     
     
 if __name__ == '__main__':
@@ -345,6 +382,7 @@ if __name__ == '__main__':
     #x = user_extns.getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
     def cb(msg):
         print('cb:' + msg)
-    x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'), cb)
+    #x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'), cb)
+    x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
     print(f'x={x}')
     

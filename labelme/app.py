@@ -120,22 +120,7 @@ from PIL import Image
 
 
 # LABEL_COLORMAP = imgviz.label_colormap(value=200)
-
-# Exclude colors too close to the color of tissue (e.g. [200,200,200])
-# TODO Clean up -- move to a function and make pythonic - remove hardcodes and reduce back and forth between lists and numpy arrays
-label_colormap_orig = imgviz.label_colormap(value=200)
-LABEL_COLORMAP = []
-# Preserve order
-for c in label_colormap_orig:
-    # Exclude colors too close to the color of tissue [200,200,200]
-    # TODO Make soft
-    if all(abs(c - np.array([200,200,200])) < np.array([50,50,50])):
-        continue
-    c_l = list(c)
-    if c_l in LABEL_COLORMAP:
-        continue
-    LABEL_COLORMAP += [c_l]
-LABEL_COLORMAP = np.array(LABEL_COLORMAP)
+LABEL_COLORMAP = user_extns.get_colormap()
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -291,8 +276,9 @@ class MainWindow(QtWidgets.QMainWindow):
         cbstyle += "}"
         self.selLabelsToShow.setStyleSheet(cbstyle)
   
-        for label in self._config['labels']:
-            self.selLabelsToShow.addItem(label)
+        if self._config['labels']:
+            for label in self._config['labels']:
+                self.selLabelsToShow.addItem(label)
         annotatorListLayout.addWidget(self.selLabelsToShow)
   
         self.annotationSessionList = QtWidgets.QListWidget()
