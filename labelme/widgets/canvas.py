@@ -179,9 +179,13 @@ class Canvas(QtWidgets.QWidget):
         if self.drawing():
             self.line.shape_type = self.createMode
 
-            self.overrideCursor(CURSOR_DRAW)
             if not self.current:
                 return
+
+            if self.shapeIsLocked(self.current):
+                return
+                
+            self.overrideCursor(CURSOR_DRAW)
 
             if self.outOfPixmap(pos):
                 # Don't allow the user to draw outside the pixmap.
@@ -215,6 +219,8 @@ class Canvas(QtWidgets.QWidget):
 
         # Polygon copy moving.
         if QtCore.Qt.RightButton & ev.buttons():
+            if self.shapeIsLocked(self.current):
+                return
             if self.selectedShapesCopy and self.prevPoint:
                 self.overrideCursor(CURSOR_MOVE)
                 self.boundedMoveShapes(self.selectedShapesCopy, pos)
@@ -228,10 +234,14 @@ class Canvas(QtWidgets.QWidget):
         # Polygon/Vertex moving.
         if QtCore.Qt.LeftButton & ev.buttons():
             if self.selectedVertex():
+                if self.shapeIsLocked(self.hShape):
+                    return
                 self.boundedMoveVertex(pos)
                 self.repaint()
                 self.movingShape = True
             elif self.selectedShapes and self.prevPoint:
+                if sum([self.shapeIsLocked(s) for s in self.selectedShapes]) > 0:
+                    return
                 self.overrideCursor(CURSOR_MOVE)
                 self.boundedMoveShapes(self.selectedShapes, pos)
                 self.repaint()
@@ -256,8 +266,13 @@ class Canvas(QtWidgets.QWidget):
                 self.prevhEdge = self.hEdge = index_edge
                 shape.highlightVertex(index, shape.MOVE_VERTEX)
                 self.overrideCursor(CURSOR_POINT)
-                self.setToolTip(self.tr("Click & drag to move point"))
-                self.setStatusTip(self.toolTip())
+                status_tip = self.tr("Click & drag to move point")
+                if hasattr(shape,'disp_label'):
+                    tool_tip = shape.disp_label
+                else:
+                    tool_tip = status_tip
+                self.setToolTip(tool_tip)
+                self.setStatusTip(status_tip)
                 self.update()
                 break
             elif shape.containsPoint(pos):
@@ -267,10 +282,15 @@ class Canvas(QtWidgets.QWidget):
                 self.hVertex = None
                 self.prevhShape = self.hShape = shape
                 self.prevhEdge = self.hEdge = index_edge
-                self.setToolTip(
-                    self.tr("Click & drag to move shape '%s'") % shape.label)
-                self.setStatusTip(self.toolTip())
-                self.overrideCursor(CURSOR_GRAB)
+                status_tip = self.tr("Click & drag to move shape '%s'") % shape.label
+                if hasattr(shape,'disp_label'):
+                    tool_tip = shape.disp_label
+                else:
+                    tool_tip = status_tip
+                self.setToolTip(tool_tip)
+                self.setStatusTip(status_tip)
+                if not self.shapeIsLocked(shape):
+                    self.overrideCursor(CURSOR_GRAB)
                 self.update()
                 break
         else:  # Nothing found, clear highlights, reset state.
@@ -282,7 +302,7 @@ class Canvas(QtWidgets.QWidget):
         shape = self.prevhShape
         index = self.prevhEdge
         point = self.prevMovePoint
-        if shape is None or index is None or point is None:
+        if shape is None or index is None or point is None or self.shapeIsLocked(shape):
             return
         shape.insertPoint(index, point)
         shape.highlightVertex(index, shape.MOVE_VERTEX)
@@ -294,7 +314,7 @@ class Canvas(QtWidgets.QWidget):
     def removeSelectedPoint(self):
         shape = self.prevhShape
         point = self.prevMovePoint
-        if shape is None or point is None:
+        if shape is None or point is None or self.shapeIsLocked(shape):
             return
         index = shape.nearestVertex(point, self.epsilon)
         shape.removePoint(index)
@@ -312,6 +332,8 @@ class Canvas(QtWidgets.QWidget):
         if ev.button() == QtCore.Qt.LeftButton:
             if self.drawing():
                 if self.current:
+                    if self.shapeIsLocked(self.current):
+                        return
                     # Add point to existing shape.
                     if self.createMode == 'polygon':
                         self.current.addPoint(self.line[1])
@@ -742,3 +764,6 @@ class Canvas(QtWidgets.QWidget):
         self.pixmap = None
         self.shapesBackups = []
         self.update()
+
+    def shapeIsLocked(self, shape):
+        return hasattr(shape,'locked') and shape.locked

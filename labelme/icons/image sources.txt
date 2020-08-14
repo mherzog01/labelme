@@ -1,0 +1,3 @@
+camera_icon -- clipArt Best - http://www.clipartbest.com/cliparts/nTX/B8L/nTXB8LgMc.png
+
+nesting.png -- https://webdesign.tutsplus.com/tutorials/how-to-use-animatetransform-for-inline-svg-animation--cms-22296

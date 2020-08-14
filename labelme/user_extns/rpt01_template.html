@@ -1,0 +1,45 @@
+<!--
+https://stackoverflow.com/questions/5130374/positioning-and-overlaying-image-on-another-image
+https://stackoverflow.com/questions/493296/css-display-an-image-resized-and-cropped
+-->
+<style>
+.crop {
+    position: relative;
+	display: inline-block;
+	#width:500; 
+	overflow:hidden;
+	object-fit:cover;
+	vertical-align:top;
+	font-size:12;	
+}
+</style>
+<script language="JavaScript">
+//basedir="c:/tmp/work4";
+basedir="%basedir";
+//images=[["20200213-154422-Img - Test.bmp","20200213-154422-Img - Test_export.png"]]
+images=%image_array
+function file_basename(file_path){
+	basename = file_path.split(/[\\\/]/).pop();
+	return basename;
+}
+
+function getimage(id, idx){
+	img = document.getElementById(id);
+	// TODO Use a more elegant approach -- node.js?
+	img_name_cur = file_basename(img.src);
+	img_name_cur = decodeURIComponent(img_name_cur)
+	img_name_new = img_name_cur == file_basename(images[idx][0]) ? images[idx][1] : images[idx][0]
+	// TODO Use OS separator
+	img.src = img_name_new
+	}
+ </script>
+<!--
+<div class="crop" onclick="getimage('20200213-154422-Img - Test.bmp_0',0)">
+<div class="crop" style="width:-620.0;height:543.3333333333335">
+ <img id="20200213-154422-Img - Test.bmp_0" src="c:\tmp\annotation_exports\20200213-154422-Img - Test_export.png" alt="20200213-154422-Img - Test.bmp Scars" style="margin-top:-1931.3333333333335;margin-left:-1931.3333333333335;">
+ </div>
+ </div>
+-->
+%image_divs
+
+
