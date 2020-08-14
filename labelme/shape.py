@@ -38,7 +38,8 @@ class Shape(object):
     scale = 1.0
 
     def __init__(self, label=None, line_color=None, shape_type=None,
-                 flags=None, group_id=None):
+                 flags=None, group_id=None, locked=False):
+        self.locked = locked
         self.label = label
         self.group_id = group_id
         self.points = []
@@ -175,12 +176,13 @@ class Shape(object):
             self._vertex_fill_color = self.hvertex_fill_color
         else:
             self._vertex_fill_color = self.vertex_fill_color
-        if shape == self.P_SQUARE:
-            path.addRect(point.x() - d / 2, point.y() - d / 2, d, d)
-        elif shape == self.P_ROUND:
-            path.addEllipse(point, d / 2.0, d / 2.0)
-        else:
-            assert False, "unsupported vertex shape"
+        if not self.locked:
+            if shape == self.P_SQUARE:
+                path.addRect(point.x() - d / 2, point.y() - d / 2, d, d)
+            elif shape == self.P_ROUND:
+                path.addEllipse(point, d / 2.0, d / 2.0)
+            else:
+                assert False, "unsupported vertex shape"
 
     def nearestVertex(self, point, epsilon):
         min_distance = float('inf')

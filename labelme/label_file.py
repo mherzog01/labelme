@@ -22,11 +22,13 @@ class LabelFileError(Exception):
 class LabelFile(object):
 
     suffix = '.json'
+    loadImage = True
 
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, loadImage=True):
         self.shapes = []
         self.imagePath = None
         self.imageData = None
+        self.loadImage = loadImage
         if filename is not None:
             self.load(filename)
         self.filename = filename
@@ -97,22 +99,26 @@ class LabelFile(object):
                         filename, version, __version__
                     )
                 )
-
-            if data['imageData'] is not None:
-                imageData = base64.b64decode(data['imageData'])
-                if PY2 and QT4:
-                    imageData = utils.img_data_to_png_data(imageData)
+            if self.loadImage:
+                #logger.debug(f'Loading image.  imageData defined={(data["imageData"] is None)}, imagePath={data["imagePath"]}')
+                if data['imageData'] is not None:
+                    imageData = base64.b64decode(data['imageData'])
+                    if PY2 and QT4:
+                        imageData = utils.img_data_to_png_data(imageData)
+                else:
+                    # TODO This may be a bug - may fail if data['imagePath'] is a different folder than filename
+                    # relative path from label file to relative path from cwd
+                    imagePath = osp.join(osp.dirname(filename), data['imagePath'])
+                    imageData = self.load_image_file(imagePath)
+                self._check_image_height_and_width(
+                        base64.b64encode(imageData).decode('utf-8'),
+                        data.get('imageHeight'),
+                        data.get('imageWidth'),
+                    )
             else:
-                # relative path from label file to relative path from cwd
-                imagePath = osp.join(osp.dirname(filename), data['imagePath'])
-                imageData = self.load_image_file(imagePath)
-            flags = data.get('flags') or {}
+                imageData = None
             imagePath = data['imagePath']
-            self._check_image_height_and_width(
-                base64.b64encode(imageData).decode('utf-8'),
-                data.get('imageHeight'),
-                data.get('imageWidth'),
-            )
+            flags = data.get('flags') or {}
             shapes = [
                 dict(
                     label=s['label'],

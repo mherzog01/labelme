@@ -34,6 +34,7 @@ def get_install_requires():
         'PyYAML',
         'qtpy',
         'termcolor',
+        'pandas',
     ]
 
     # Find python binding for qt with priority:
@@ -81,7 +82,7 @@ def get_long_description():
     try:
         import github2pypi
         return github2pypi.replace_url(
-            slug='wkentaro/labelme', content=long_description
+            slug='mherzog01/labelme', content=long_description
         )
     except Exception:
         return long_description
@@ -113,15 +114,15 @@ def main():
         name='labelme',
         version=version,
         packages=find_packages(exclude=['github2pypi']),
-        description='Image Polygonal Annotation with Python',
+        description='Image Polygonal Annotation and Ground Truth Builder - Python-based',
         long_description=get_long_description(),
         long_description_content_type='text/markdown',
-        author='Kentaro Wada',
-        author_email='www.kentaro.wada@gmail.com',
-        url='https://github.com/wkentaro/labelme',
+        author='Michael Herzog',
+        author_email='michael.herzog@allergan.com',
+        url='https://github.com/mherzog01/labelme',
         install_requires=get_install_requires(),
         license='GPLv3',
-        keywords='Image Annotation, Machine Learning',
+        keywords='Image Annotation, Machine Learning, Ground Truth',
         classifiers=[
             'Development Status :: 5 - Production/Stable',
             'Intended Audience :: Developers',
