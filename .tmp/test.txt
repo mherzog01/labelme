@@ -1,0 +1,11 @@
+ Volume in drive C is Windows
+ Volume Serial Number is 1E2A-22E8
+
+ Directory of C:\Users\mherzo\Documents\GitHub\labelme\.tmp
+
+03/31/2020  10:14 PM    <DIR>          .
+03/31/2020  10:14 PM    <DIR>          ..
+03/31/2020  10:14 PM                 0 test.txt
+03/31/2020  11:01 AM    <DIR>          __pycache__
+               1 File(s)              0 bytes
+               3 Dir(s)  28,990,939,136 bytes free
