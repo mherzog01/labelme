@@ -52,7 +52,6 @@ from PIL import Image
 #8.	If polygons aren't selected and choose delete, don't prompt for delete confirmation
 #9.	Add VerifyFile to config shortcuts
 #10.	**Verify prompts for output dir every time
-#11.	**Poor performance loading images
 #12.	When in insert mode, highlight polygon if select an entry in the Polygon Labels list
 #13.	*Rotate picture
 #15.	 * Remember last input and output folders
@@ -63,6 +62,20 @@ from PIL import Image
 #20.  Update Tutorial 
 #21.  Propose merge with source fork.  Update GitHub doc.
 #22.  When zoom with control keys, lose center of viewing area
+#23.  Add annotation filtering (not just export/load).  Dialog box with prompts for filter criteria (list of Labels, intensity range, etc.)
+#24.  * See M:\MSA\Util\export_images\gen_report.py for tasks
+#25.  * Don't hardcode flags in tools.py/getAnnotDf
+#26.  Ability to capture freeform text for each annotation and image
+#27.  Number each annotation.  Optionally display # and label on canvas.  See IBM, CVAT, and LabelBox - have slick interfaces
+#28.  Auto zoom to tissue
+#29.  Search text box UI
+#    - If click in LabelMe text box, highlight entire text
+#    - If press Esc, undo change
+#    - If filter shows a single image, load that image
+#    - Provide an "x" button to quickly clear the filter
+#30.  View files in input directory using File Explorer
+
+
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window

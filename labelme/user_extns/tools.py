@@ -240,7 +240,7 @@ def getDesktop():
         return desktop_vdi
         
     
-    
+# TODO Don't hardcode flags    
 def getAnnotDf(file_list, status_callback=None):
     
     def get_flag_value(flag_dict, flag_key):
