@@ -240,71 +240,97 @@ def getDesktop():
         return desktop_vdi
         
     
-# TODO Don't hardcode flags    
 def getAnnotDf(file_list, status_callback=None):
     
-    def get_flag_value(flag_dict, flag_key):
-        return (flag_key in flag_dict and flag_dict[flag_key])
+    annot_c = AnnotDf(status_callback)
+    annot_c.load_files(file_list)
+    return annot_c.df_annot
+
+
+class AnnotDf():
+
+    def __init__(self,
+                 status_callback=None):
+        # Assume:
+        #   - .json are in same directory as files in file_list
+        self.df_annot = pd.DataFrame(columns=['image_path',
+                                              'image_basename',
+                                              'annot_num',
+                                              'label',
+                                              'group_id'])
+        self.df_annot.astype({'image_path':str,
+                              'image_basename':str,
+                              'annot_num':int,
+                              'label':str,
+                                        'group_id':int})
+        self.status_callback = status_callback
     
-    def stat_msg(msg):
-        if status_callback:
-            status_callback(msg)
+    
+    #def get_flag_value(self, flag_dict, flag_key):
+    #    return (flag_key in flag_dict and flag_dict[flag_key])
+    
+    def stat_msg(self, msg):
+        if self.status_callback:
+            self.status_callback(msg)
         else:
             print(msg)
 
-    # Assume:
-    #   - .json are in same directory as files in file_list
-    #   - Label_dir has annotation data (.json files) for all files in img_files
-    df_annot = pd.DataFrame(columns=['image_path',
-                                     'annot_num',
-                                     'label',
-                                     'group_id',
-                                     'not_in_picture',
-                                     'not_in_tissue',
-                                     'review_recommended',
-                                     'rework'])
-    df_annot.astype({'image_path':str,
-                                     'annot_num':int,
-                                     'label':str,
-                                     'group_id':int,
-                                     'not_in_picture':bool,
-                                     'not_in_tissue':bool,
-                                     'review_recommended':bool,
-                                     'rework':bool})
-    for img_file in file_list:
+    def load_files(self, file_list):
         
-        #img_date = datetime.datetime.strptime(row[0].split(' ')[0],'%Y-%m-%d')
-        stat_msg(f'File {img_file}.')
-        label_file = user_extns.imgFileToLabelFileName(img_file, osp.dirname(img_file))
-        if not osp.exists(label_file):
-            stat_msg(f'ERROR:  No label file {label_file} found for image file {img_file}.')
-            continue
-        #img_basename = osp.basename(img_file)
-        labelFile = LabelFile(label_file, loadImage=False)    
-        #img_unique_labels = set([shape['label'] for shape in labelFile.shapes])
-        #print(f'File {img_file}.  img_unique_labels={img_unique_labels}')
+        for img_file in file_list:
+            
+            #img_date = datetime.datetime.strptime(row[0].split(' ')[0],'%Y-%m-%d')
+            self.stat_msg(f'File {img_file}.')
+            label_file = user_extns.imgFileToLabelFileName(img_file, osp.dirname(img_file))
+            if not osp.exists(label_file):
+                self.load_shape(img_file)
+                #stat_msg(f'No label file {label_file} found for image file {img_file}.')
+                continue
+            #img_basename = osp.basename(img_file)
+            labelFile = LabelFile(label_file, loadImage=False)    
+            #img_unique_labels = set([shape['label'] for shape in labelFile.shapes])
+            #print(f'File {img_file}.  img_unique_labels={img_unique_labels}')
+            self.load_shapes(img_file, labelFile.shapes)
+
+    def load_shapes(self,img_file, shape_list):
         annot_num = 0
-        for shape in labelFile.shapes:
+        for shape in shape_list:
             annot_num += 1 
             flag_dict = shape['flags']
             label = shape['label']
             group_id = shape['group_id']
-            not_in_picture = get_flag_value(flag_dict, 'Not in picture')
-            not_in_tissue = get_flag_value(flag_dict, 'Not in tissue')
-            review_recommended = get_flag_value(flag_dict, 'Review recommended')
-            rework = get_flag_value(flag_dict, 'Rework')
+            # not_in_picture = self.get_flag_value(flag_dict, 'Not in picture')
+            # not_in_tissue = self.get_flag_value(flag_dict, 'Not in tissue')
+            # review_recommended = self.get_flag_value(flag_dict, 'Review recommended')
+            # rework = self.get_flag_value(flag_dict, 'Rework')
+            self.load_shape(
+                       img_file,
+                       annot_num,
+                       label,
+                       group_id,
+                       flag_dict)
             #break
-            df_annot.loc[len(df_annot)] = {'image_path':img_file,
-                                     'annot_num':annot_num,
-                                     'label':label,
-                                     'group_id':group_id,
-                                     'not_in_picture':not_in_picture,
-                                     'not_in_tissue':not_in_tissue,
-                                     'review_recommended':review_recommended,
-                                     'rework':rework}
         if annot_num == 0:
-            df_annot.loc[len(df_annot),'image_path'] = img_file
-    return df_annot
+            self.load_shape(img_file)
+
+    def load_shape(self,
+                   img_file,
+                   annot_num = 0,
+                   label = None,
+                   group_id = None,
+                   flag_dict = None):
+        key = len(self.df_annot)
+        self.df_annot.loc[key, 'image_path'] = img_file
+        self.df_annot.loc[key, 'image_basename'] = osp.basename(img_file)
+        self.df_annot.loc[key, 'annot_num'] = annot_num
+        self.df_annot.loc[key, 'label'] = label
+        self.df_annot.loc[key, 'group_id'] = group_id
+        if flag_dict:
+            for flag in flag_dict:
+                col_name = flag.replace(' ','_')
+                # No need to create columns.  Assignment via .loc[key,col] creates if needed
+                #if not col_name in self.df_annot.columns:
+                self.df_annot.loc[key, col_name] = flag_dict[flag]
     
     
 if __name__ == '__main__':
@@ -316,6 +342,9 @@ if __name__ == '__main__':
     #msgBox.exec()
     
     #sys.exit(app.exec_())
-    x = user_extns.getAnnotDf(glob.glob(r'c:\tmp\work1\*.bmp'))
+    #x = user_extns.getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
+    def cb(msg):
+        print('cb:' + msg)
+    x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'), cb)
     print(f'x={x}')
     

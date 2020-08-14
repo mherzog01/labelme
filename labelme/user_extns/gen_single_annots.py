@@ -34,11 +34,13 @@ import pandas as pd
 #------------------------------------------
 # Settings
 module_folder = osp.dirname(__file__)
-export_folder = osp.join(module_folder, 'annotation_exports_single')
-#label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
-label_dir = r'c:\tmp\work4'
+#export_folder = osp.join(module_folder, 'annotation_exports_single')
+export_folder = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\util\export_images\annotation_exports_single'
+label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
+#label_dir = r'c:\tmp\work4'
 selection_margin = 100  # Number of pixels that surround the selected area of the image
-create_img_exports = ['all','new','none'][1]  
+#create_img_exports = ['all','new','none'][0]  
+create_img_exports = ['all','none'][0]  
 #------------------------------------------
 
 annotation_color = QtGui.QColor(0,0,0)
@@ -57,10 +59,26 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S} Image={img_basename}')
     
     img_basestem, img_ext = osp.splitext(img_basename)
+    export_basestem = f'{img_basestem}_export_'
 
     label_file = user_extns.imgFileToLabelFileName(img_basename, label_dir)
-    labelFile = labelme.LabelFile(label_file, loadImage=False)    
+    if osp.exists(label_file):
+        labelFile = labelme.LabelFile(label_file, loadImage=False)    
+    else:
+        continue
     
+    # Delete all files for image
+    if create_img_exports == 'all':
+        create_image = True
+    elif create_img_exports == 'none':
+        create_image = False
+#    elif create_img_exports == 'new':
+#        create_image = not osp.exists(export_path)        
+    
+    if create_image: 
+        for file in glob.glob(osp.join(export_folder,img_basestem + '*.png')):
+            os.remove(file)
+                
     img_pixmap = QtGui.QPixmap(img_path)
     img_shape = [img_pixmap.size().width(),img_pixmap.size().height()]
 
@@ -107,20 +125,9 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         margin_top = roi_ur[1]
         margin_left = roi_ll[0]
     
-        export_basename = f'{img_basestem}_export_{s_obj.label}_{annot_idx}.png'
+        export_basename = export_basestem + f'{s_obj.label}_{annot_idx}.png'
         export_path = osp.join(export_folder,export_basename)
         
-        if create_img_exports == 'all':
-            create_image = True
-        elif create_img_exports == 'none':
-            create_image = False
-        elif create_img_exports == 'new':
-            create_image = not osp.exists(export_path)        
-    
-        # Delete files one at a time to allow updates of individual files
-        if create_image and osp.exists(export_path):
-            os.remove(export_path)
-                
         if create_image:
             # https://stackoverflow.com/questions/25795380/how-to-crop-a-image-and-save
             roi_ll_q = QtCore.QPoint(margin_left,margin_top)
@@ -136,7 +143,9 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
                 s_obj.paint(p)
                 p.end()
             pixmap.save(export_path)
-        
+    #if img_num > 10:
+    #    break
+
         # Delete/add .json
 
 # TODO * Handle errors - clean up painter 
