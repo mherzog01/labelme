@@ -82,15 +82,17 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     img_pixmap = QtGui.QPixmap(img_path)
     img_shape = [img_pixmap.size().width(),img_pixmap.size().height()]
 
-    # Paint annotations
-    # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
-    # TODO don't paint if 'create_image' == False
+    # Organize images by label/annotation instance
     shapes_to_export = labelFile.shapes
     df_shapes = pd.DataFrame([(shape['label'],shape) for shape in shapes_to_export], columns=['label','shape'])
     df_shapes = df_shapes.sort_values(['label'])
     # https://stackoverflow.com/questions/37997668/pandas-number-rows-within-group-in-increasing-order
     df_shapes['idx'] = df_shapes.groupby('label').cumcount()+1
     df_shapes.set_index(['label','idx'],inplace=True)
+    
+    # Paint annotations
+    # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
+    # TODO don't paint if 'create_image' == False
     for label, annot_idx in df_shapes.index:
         s = df_shapes.loc[(label,annot_idx)]['shape']
         s_obj = Shape(label=s['label'], shape_type=s['shape_type'],

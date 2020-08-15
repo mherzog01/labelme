@@ -2221,7 +2221,7 @@ class MainWindow(QtWidgets.QMainWindow):
                                
         annot_xlsx = osp.join(user_extns.getDesktop(),'Annotations.xlsx')
         df_annot['Selected'] = None
-        df_annot.to_excel(annot_xlsx)    
+        df_annot.to_excel(annot_xlsx, freeze_panes=(1,1), columns=[c for c in df_annot if not c in ['shape_obj']])    
         num_images = len(df_annot['image_path'].unique())
         stat_callback(f'Export complete to {annot_xlsx}.  # images={num_images}.  # annot={len(df_annot)}.')
         

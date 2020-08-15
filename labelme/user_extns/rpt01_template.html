@@ -1,9 +1,14 @@
+<html>
+<head><title>Tissue Annotation Detail</title>
+</head>
+<body>
 <!--
 https://stackoverflow.com/questions/5130374/positioning-and-overlaying-image-on-another-image
 https://stackoverflow.com/questions/493296/css-display-an-image-resized-and-cropped
 -->
 <style>
-.crop {
+* { font-family:sans-serif; }
+.disp_img {
     position: relative;
 	display: inline-block;
 	#width:500; 
@@ -14,24 +19,43 @@ https://stackoverflow.com/questions/493296/css-display-an-image-resized-and-crop
 }
 </style>
 <script language="JavaScript">
-//basedir="c:/tmp/work4";
-basedir="%basedir";
-//images=[["20200213-154422-Img - Test.bmp","20200213-154422-Img - Test_export.png"]]
-images=%image_array
+//tissue_imgs=[["20200213-154422-Img - Test.bmp","20200213-154422-Img - Test_export.png"]]
+tissue_imgs=%image_dict;
+annot_imgs=%annot_dict;
 function file_basename(file_path){
+	// TODO Use OS separator
 	basename = file_path.split(/[\\\/]/).pop();
 	return basename;
 }
 
-function getimage(id, idx){
+function getimage(id, annot_idx){
+	img_type = get_image_type(id, annot_idx);
+	img_name_new = annot_imgs[annot_idx][img_type]
+	// TODO The handle to the document was already found in get_image_type.  Don't do it again.
+	img = document.getElementById(id);
+	img.src = img_name_new
+	}
+	
+function get_image_type(id, annot_idx, toggle = true){
+	// 0 = image is just of tissue, no outlines
+	// 1 = image contains outline of annotation
+	// If toggle = true, return the other value
 	img = document.getElementById(id);
 	// TODO Use a more elegant approach -- node.js?
 	img_name_cur = file_basename(img.src);
-	img_name_cur = decodeURIComponent(img_name_cur)
-	img_name_new = img_name_cur == file_basename(images[idx][0]) ? images[idx][1] : images[idx][0]
-	// TODO Use OS separator
-	img.src = img_name_new
+	img_name_cur = decodeURIComponent(img_name_cur);
+	if (img_name_cur == file_basename(annot_imgs[annot_idx][0])){
+		return toggle ? 1 : 0;
+	} 
+	else {
+		return toggle ? 0 : 1;
 	}
+}
+	
+function show_tissue_img(id, annot_idx, img_idx){
+	img_type = get_image_type(id, annot_idx,toggle=false);
+	window.open(tissue_imgs[img_idx][img_type],'_blank');
+}	
  </script>
 <!--
 <div class="crop" onclick="getimage('20200213-154422-Img - Test.bmp_0',0)">
@@ -43,3 +67,5 @@ function getimage(id, idx){
 %image_divs
 
 
+</body>
+</html>

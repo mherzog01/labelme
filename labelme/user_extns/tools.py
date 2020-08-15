@@ -261,12 +261,14 @@ class AnnotDf():
                                               'image_basename',
                                               'annot_num',
                                               'label',
-                                              'group_id'])
+                                              'group_id',
+                                              'shape_obj'])
         self.df_annot.astype({'image_path':str,
                               'image_basename':str,
                               'annot_num':int,
                               'label':str,
-                                        'group_id':int})
+                              'group_id':int,
+                              'shape_obj':object})
         # By default, run silently.
         # If status_callback = 'print', print the file name
         # Otherwise, pass a function that takes a string as a parameter
@@ -274,9 +276,12 @@ class AnnotDf():
         #           print(f'In callback.  msg={msg}')
         self.status_callback = status_callback
         
-        # Public status data
+        # -------------------
+        # Public data
+        # -------------------
         self.cur_image_path = None
         self.cur_key = None
+        self.cur_LabelFile = None
     
     @property
     def cur_image_basename(self):
@@ -291,7 +296,12 @@ class AnnotDf():
         elif self.status_callback == 'print':
             print(msg)
 
-    def load_files(self, file_list):
+    def load_files(self, files):
+        
+        if isinstance(files,list):
+            file_list = files
+        else:
+            file_list = [files]
         
         for img_file in file_list:
             
@@ -303,10 +313,10 @@ class AnnotDf():
                 self.load_shape(img_file)
                 #stat_msg(f'No label file {label_file} found for image file {img_file}.')
                 continue
-            labelFile = LabelFile(label_file, loadImage=False)    
+            self.cur_LabelFile = LabelFile(label_file, loadImage=False)    
             #img_unique_labels = set([shape['label'] for shape in labelFile.shapes])
             #print(f'File {img_file}.  img_unique_labels={img_unique_labels}')
-            self.load_shapes(img_file, labelFile.shapes)
+            self.load_shapes(img_file, self.cur_LabelFile.shapes)
 
     def load_shapes(self,img_file, shape_list):
         annot_num = 0
@@ -324,7 +334,8 @@ class AnnotDf():
                        annot_num,
                        label,
                        group_id,
-                       flag_dict)
+                       flag_dict,
+                       shape)
             #break
         if annot_num == 0:
             self.load_shape(img_file)
@@ -334,7 +345,8 @@ class AnnotDf():
                    annot_num = 0,
                    label = None,
                    group_id = None,
-                   flag_dict = None):
+                   flag_dict = None,
+                   shape_dict=None):
         self.cur_image_path = img_file
         self.cur_key = len(self.df_annot)
         
@@ -348,8 +360,13 @@ class AnnotDf():
             for flag in flag_dict:
                 col_name = flag.replace(' ','_')
                 # No need to create columns.  Assignment via .loc[key,col] creates if needed
-                #if not col_name in self.df_annot.columns:
+                # TODO Handle conflicts with existing columns - add a suffix?
                 self.df_annot.loc[key, col_name] = flag_dict[flag]
+        shape_obj = shape_dict_to_obj(shape_dict)
+        self.df_annot.loc[key,'shape_obj'] = shape_obj
+        
+    def to_excel(self, excel_file_path):
+        self.df_annot.to_excel(excel_file_path, freeze_panes=(1,1), columns=[c for c in x.columns if not c in ['shape_obj']])
     
 def get_colormap():
     # TODO Make pythonic - remove hardcodes and reduce back and forth between lists and numpy arrays
@@ -368,6 +385,15 @@ def get_colormap():
     label_colormap_array = np.array(label_colormap_list)
     return label_colormap_list
     
+
+def shape_dict_to_obj(shape_dict):
+    s_obj = Shape(label = shape_dict['label'], 
+                  shape_type = shape_dict['shape_type'],
+                  flags = shape_dict['flags'], 
+                  group_id = shape_dict['group_id'])
+    s_obj.points = [QtCore.QPointF(pt[0],pt[1]) for pt in shape_dict['points']]
+    return s_obj
+
     
     
 if __name__ == '__main__':
@@ -383,6 +409,8 @@ if __name__ == '__main__':
     def cb(msg):
         print('cb:' + msg)
     #x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'), cb)
-    x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
+    #x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
+    x = getAnnotDf(glob.glob(r'c:\tmp\work4\annot\Ground Truth\*.bmp'))
     print(f'x={x}')
+    x.to_excel(r'c:\tmp\test.xlsx', freeze_panes=(1,1), columns=[c for c in x.columns if not c in ['shape_obj']])
     
