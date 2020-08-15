@@ -287,6 +287,13 @@ class AnnotDf():
     def cur_image_basename(self):
         return osp.basename(self.cur_image_path)
     
+    @property
+    def cur_image_shapes(self):
+        if self.cur_LabelFile:
+            return self.cur_LabelFile.shapes
+        else:
+            return None
+
     #def get_flag_value(self, flag_dict, flag_key):
     #    return (flag_key in flag_dict and flag_dict[flag_key])
     
@@ -320,6 +327,7 @@ class AnnotDf():
 
     def load_shapes(self,img_file, shape_list):
         annot_num = 0
+        self.cur_image_path = img_file
         for shape in shape_list:
             annot_num += 1 
             flag_dict = shape['flags']
@@ -387,6 +395,8 @@ def get_colormap():
     
 
 def shape_dict_to_obj(shape_dict):
+    if not shape_dict:
+        return None
     s_obj = Shape(label = shape_dict['label'], 
                   shape_type = shape_dict['shape_type'],
                   flags = shape_dict['flags'], 

@@ -80,9 +80,9 @@ def get_defect_intensity(group_id):
 
 #------------------------------------------
 # Settings
-run_mode = ['DEV','PROD'][0]
+run_mode = ['DEV','PROD'][1]
 create_img_exports = ['all','new','none'][1]  
-create_annot_exports = [ 'all','none'][1]
+create_annot_exports = [ 'all','none'][0]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
 if run_mode == 'PROD':
     label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
@@ -130,13 +130,16 @@ app = QtWidgets.QApplication(sys.argv)
 label_colors = {}
 img_num = -1
 for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
-
-    obj_annots.load_files(img_path)
-    img_basename = obj_annots.cur_image_basename
-    print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S} Image={img_basename}')
     
     img_num += 1
 
+    obj_annots.load_files(img_path)
+    img_basename = obj_annots.cur_image_basename
+    print(f'{datetime.datetime.now():%Y-%m-%d %H:%M:%S} Image={img_num}: {img_basename}')
+    
+    if not obj_annots.cur_image_shapes:
+        continue
+    
     img_basestem, img_ext = osp.splitext(img_basename)
     export_img_basename = img_basestem + '_export.png'
     export_img_path = osp.join(export_img_dir,export_img_basename)
@@ -181,11 +184,11 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         row = df_shapes.loc[idx]
         annot_num = row['annot_num']  # Unique within an image
         annot_id = row.name # Unique identifier across all annotations in report
-        s_obj = row['shape_obj']
-        first_pt_q = None
+        s_obj = row['shape_obj']        
+        label = s_obj.label
 
         # TODO *Make colors consistent with labelMe
-        if not s_obj.label in label_colors:
+        if label and not label in label_colors:
             label_colors[s_obj.label] = QtGui.QColor(*LABEL_COLORMAP[len(label_colors) % num_colors])
         
         # TODO More pythonic way of handing min/max x/y
