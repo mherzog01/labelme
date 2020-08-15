@@ -82,7 +82,7 @@ def get_defect_intensity(group_id):
 # Settings
 run_mode = ['DEV','PROD'][1]
 create_img_exports = ['all','new','none'][1]  
-create_annot_exports = [ 'all','none'][0]
+create_annot_exports = [ 'all','new','none'][1]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
 if run_mode == 'PROD':
     label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
@@ -97,11 +97,6 @@ export_img_dir = osp.join(export_root,'annotation_exports')
 export_annot_dir = osp.join(export_root,'annotation_exports_single')
 #label_dir = r'c:\tmp\work4'
 
-if create_annot_exports == 'all':
-    create_annot_images = True
-else:
-    create_annot_images = False
-            
 # The report depends on current state of image annotations, so prior versions may not have integrity
 #rpt_stem = 'rpt01'
 #rpt_name = f'{rpt_stem}_{datetime.datetime.now():%Y%M%D_%h%m%s}.html'
@@ -150,6 +145,8 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         create_image = False
     elif create_img_exports == 'new':
         create_image = not osp.exists(export_img_path)        
+    else:
+        print(f'Invalid value for create_image={create_image}')
 
     image_dict[img_num] = [img_path, export_img_path]
     
@@ -157,11 +154,6 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     if create_image and osp.exists(export_img_path):
         os.remove(export_img_path)
     
-    # Delete all annotations of the image to allow for annotation changes
-    if create_annot_images:
-        for file in glob.glob(osp.join(export_annot_dir,img_basestem + '*.png')):
-            os.remove(file)
-
     img_pixmap = QtGui.QPixmap(img_path)
     img_pixmap_orig = img_pixmap.copy()
     img_size = img_pixmap.size()
@@ -184,7 +176,9 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         row = df_shapes.loc[idx]
         annot_num = row['annot_num']  # Unique within an image
         annot_id = row.name # Unique identifier across all annotations in report
-        s_obj = row['shape_obj']        
+        s_obj = row['shape_obj']  
+        if not hasattr(s_obj,'label'):
+            continue
         label = s_obj.label
 
         # TODO *Make colors consistent with labelMe
@@ -228,11 +222,29 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         # Create images for the annotation
         # ------------------
         label_clean = s_obj.label.replace('/','')
-        export_annot_basename = export_annot_basestem + f'{label_clean}_{annot_id}.png'
+        export_annot_basename = export_annot_basestem + f'{label_clean}_{annot_num}.png'
         export_annot_path = osp.join(export_annot_dir,export_annot_basename)        
 
-        export_annot_basename_a = export_annot_basestem + f'{label_clean}_{annot_id}_annot.png'
+        export_annot_basename_a = export_annot_basestem + f'{label_clean}_{annot_num}_annot.png'
         export_annot_path_a = osp.join(export_annot_dir,export_annot_basename_a)        
+
+        if create_annot_exports == 'all':
+            create_annot_images = True
+        elif create_annot_exports == 'none':
+            create_annot_images = False
+        elif create_annot_exports == 'new':
+            if osp.exists(export_annot_path) and osp.exists(export_annot_path_a):
+                create_annot_images = False
+            else:
+                create_annot_images = True
+        else:
+            print(f'Invalid value for create_annot_exports={create_annot_exports}')
+            
+                
+        # Delete all annotations of the image to allow for annotation changes
+        if create_annot_images:
+            for file in glob.glob(osp.join(export_annot_dir,img_basestem + '*.png')):
+                os.remove(file)
 
         if create_annot_images:
             # https://stackoverflow.com/questions/25795380/how-to-crop-a-image-and-save
