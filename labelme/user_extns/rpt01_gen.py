@@ -79,7 +79,7 @@ def get_defect_intensity(group_id):
 
 #------------------------------------------
 # Settings
-run_mode = ['DEV','PROD'][0]
+run_mode = ['DEV','PROD'][1]
 create_img_exports = ['all','new','none'][1]  
 create_annot_exports = [ 'all','new','none'][1]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
@@ -168,7 +168,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     
     # Paint annotations
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
-    # TODO don't paint if 'create_image' == False
+    # TODO don't paint if 'create_image' == False and 'create_annot' == False.  However, if create_annot_exports == 'new', 'create_annot' is set below 
     p_img = QtGui.QPainter(img_pixmap)
     
     #TODO Centralize logic in creating all names.  Deletion, and possibly other logic makes naming assumptions.
@@ -183,7 +183,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         create_annot_images = False
     elif create_annot_exports == 'new':
         # create_annot_images will be set in logic below for each annotation
-        pass
+        create_annot_images = None
     else:
         print(f'Invalid value for create_annot_exports={create_annot_exports}')
 
