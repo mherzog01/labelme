@@ -24,6 +24,7 @@ TODO *** Scan entire list below for priority tasks
 1.1 Improve performance/cleanthliness of HTML
 - Use styles, not object-level HTML (e.g. onclick)
 - Break into separate files
+1.2 * Don't output full paths for each entry in tissue and annot arrays.  Instead, place the folder names in arrays/vars and use JavaScript to construct a path to the image.
 2. If click on image text, select whole image name
 3. **Display of defects, ensure some value is shown.  E.g. 20200306-154951-Img.bmp, Annot #7 - center and point on circle are the same:
         {
@@ -51,6 +52,7 @@ TODO *** Scan entire list below for priority tasks
 5.  Create map for each image - hover over each annotation and see different values
 6.  Double click on defect and launch LabelMe for that image
 7.  * In last section, images with no defects are not displayed.  nan is shown instead.
+8.  Change name from /util to /reports
 10.  Display lot number.  Requires using database -- centralize annotations with data set?
 11. Comments
 """

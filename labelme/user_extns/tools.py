@@ -169,9 +169,12 @@ def launchExternalViewer(filename):
     
 
 # Exports a separate single-bit file for each image/defect combination    
-def exportAnnotationsForImage(img_file, label_dir):
+def exportAnnotationsForImage(img_file, label_dir, export_folder):
     
-    export_folder = r'c:\tmp\annotation_exports'
+    if not osp.exists(img_file):
+        print(f'ERROR:  Image file {img_file} does not exist')
+        return
+    
     img_basename = osp.splitext(osp.basename(img_file))[0]
     export_basepath = osp.join(export_folder,img_basename + '_export')
     
@@ -179,6 +182,10 @@ def exportAnnotationsForImage(img_file, label_dir):
         os.remove(f)
 
     label_file = user_extns.imgFileToLabelFileName(img_file, label_dir)
+    if not osp.exists(label_file):
+        print(f'ERROR:  Label file {label_file} does not exist')
+        return
+    
     labelFile = labelme.LabelFile(label_file)    
     labels_to_export = set([shape['label'] for shape in labelFile.shapes])
     print(f'labels_to_export={labels_to_export}')
@@ -210,8 +217,10 @@ def exportAnnotationsForImage(img_file, label_dir):
         
         targ_file = export_basepath + f'_{label.replace("/","")}.png'
         #TODO Move to PIL without saving to disk in order 
-        img_to_export.save(targ_file)
-                
+        retcode = img_to_export.save(targ_file)
+        if not retcode:
+            print(f'ERROR Unable to export {targ_file}')
+            continue
         img_tmp = PIL.Image.open(targ_file)
         img_tmp = img_tmp.convert("L")
         img_tmp.save(targ_file)    
@@ -219,15 +228,36 @@ def exportAnnotationsForImage(img_file, label_dir):
     
     
 def exportAnnotationsFromImageDir():
-    img_dir = r'C:\Users\mherzo\AppData\Roaming\Cognex Corporation\Cognex ViDi Suite 3.4\workspaces\MH Test Vidi Workspace\b36e3836-b906-44ab-ac9a-a318102e9ea3\images'
-    for f in glob.glob(img_dir + r'\*'):
+    #img_dir = r'C:\Users\mherzo\AppData\Roaming\Cognex Corporation\Cognex ViDi Suite 3.4\workspaces\MH Test Vidi Workspace\b36e3836-b906-44ab-ac9a-a318102e9ea3\images'
+    img_dir = r'c:\tmp\work4\Annot\Ground Truth'
+    if False:
+        img_dir = QtWidgets.QFileDialog.getExistingDirectory(
+                None,
+                f'Export Annotations from Directory',
+                img_dir,
+                QtWidgets.QFileDialog.ShowDirsOnly |
+                QtWidgets.QFileDialog.DontResolveSymlinks,
+            )
+        img_dir = str(img_dir)
+
+    targ_dir = r'C:\Tmp\Work4\util\export_images\masks'
+    if False:
+        targ_dir = QtWidgets.QFileDialog.getExistingDirectory(
+                None,
+                f'Export Annotations from Directory',
+                targ_dir,
+                QtWidgets.QFileDialog.ShowDirsOnly |
+                QtWidgets.QFileDialog.DontResolveSymlinks,
+            )
+        targ_dir = str(targ_dir)
+    for f in glob.glob(img_dir + r'\*.bmp'):
         print(f)
-        if osp.basename(f) < '20200211' or osp.basename(f)[:4] == 'Img-':
-            continue
-            #label_dir = r'D:\Tissue Defect Inspection\Images3'
-        else:
-            label_dir = r'D:\Tissue Defect Inspection\Images4'
-        exportAnnotationsForImage(f, label_dir)
+        # if osp.basename(f) < '20200211' or osp.basename(f)[:4] == 'Img-':
+        #     continue
+        #     #label_dir = r'D:\Tissue Defect Inspection\Images3'
+        # else:
+        #     label_dir = r'D:\Tissue Defect Inspection\Images4'
+        exportAnnotationsForImage(f, osp.dirname(f), targ_dir)
         #break
         
         
@@ -414,13 +444,20 @@ if __name__ == '__main__':
     #msgBox = dispMsgBox('1', '2', icon='Warning')
     #msgBox.exec()
     
-    #sys.exit(app.exec_())
-    #x = user_extns.getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
-    def cb(msg):
-        print('cb:' + msg)
-    #x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'), cb)
-    #x = getAnnotDf(glob.glob(r'm:\msa\annot\Ground Truth\*.bmp'))
-    x = getAnnotDf(glob.glob(r'c:\tmp\work4\annot\Ground Truth\*.bmp'))
-    print(f'x={x}')
-    x.to_excel(r'c:\tmp\test.xlsx', freeze_panes=(1,1), columns=[c for c in x.columns if not c in ['shape_obj']])
+    proc_to_run = {0:'Export Annotations From Dir',
+                   1:'Get Annotations Df',
+                   2:'Get Annotations Df (with cb)',
+                   }[0]
     
+    if proc_to_run == 'Get Annotations Df':
+        x = getAnnotDf(glob.glob(r'c:\tmp\work4\annot\Ground Truth\*.bmp'))
+        print(f'x={x}')
+        x.to_excel(r'c:\tmp\test.xlsx', freeze_panes=(1,1), columns=[c for c in x.columns if not c in ['shape_obj']])
+    elif proc_to_run == 'Get Annotations Df (with cb)':
+        def cb(msg):
+            print('cb:' + msg)
+        x = getAnnotDf(glob.glob(r'c:\tmp\work4\annot\Ground Truth\*.bmp'),cb)
+        print(f'x={x}')
+        x.to_excel(r'c:\tmp\test.xlsx', freeze_panes=(1,1), columns=[c for c in x.columns if not c in ['shape_obj']])
+    elif proc_to_run == 'Export Annotations From Dir':
+        exportAnnotationsFromImageDir()
