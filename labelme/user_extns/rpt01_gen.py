@@ -171,7 +171,15 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
     # TODO don't paint if 'create_image' == False
     p_img = QtGui.QPainter(img_pixmap)
+    
+    #TODO Centralize logic in creating all names.  Deletion, and possibly other logic makes naming assumptions.
     export_annot_basestem = f'{img_basestem}_export_'
+
+    # Delete all annotations of the image, if desired
+    if create_annot_exports == 'all':
+        for file in glob.glob(osp.join(export_annot_dir,export_annot_basestem + '*.png')):
+            os.remove(file)
+
     for idx in df_shapes.index:
         row = df_shapes.loc[idx]
         annot_num = row['annot_num']  # Unique within an image
@@ -241,11 +249,6 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
             print(f'Invalid value for create_annot_exports={create_annot_exports}')
             
                 
-        # Delete all annotations of the image to allow for annotation changes
-        if create_annot_images:
-            for file in glob.glob(osp.join(export_annot_dir,img_basestem + '*.png')):
-                os.remove(file)
-
         if create_annot_images:
             # https://stackoverflow.com/questions/25795380/how-to-crop-a-image-and-save
             roi_ll_q = QtCore.QPoint(margin_left,margin_top)
@@ -282,12 +285,12 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         image_divs += f'<div class="disp_img">\n'
         image_divs += f'  <div '
         image_divs += f'       onclick="getimage(\'{img_id}\',{annot_id})"'
-        image_divs += f'       title="{s_obj.label}, Intensity: {get_defect_intensity(s_obj.group_id), {img_basename}}">\n'
+        image_divs += f'       title="{s_obj.label}, Intensity: {get_defect_intensity(s_obj.group_id)}, {img_basename}">\n'
         image_divs += f'    <img id="{img_id}" src="{export_annot_path_a}" alt="{export_annot_basename_a} {s_obj.label}">\n'
         image_divs += f'  </div>\n'
         image_divs += f'  <div style="height:5"></div>\n'
         image_divs += f'  <div style="width:{img_div_width}">\n'
-        image_divs += f'    {img_basename}, {annot_num} <a onclick="show_tissue_img(\'{img_id}\',{annot_id},{img_num})" href="#">Show</a>\n'
+        image_divs += f'    {img_basename}, {annot_num} <a onclick="show_tissue_img(\'{img_id}\',{annot_id},{img_num})" href="javascript:void">Show</a>\n'
         if any(s_obj.flags.values()):
             image_divs += f'    <br>{", ".join([key for key in s_obj.flags if s_obj.flags[key]])}\n'
         image_divs += f'    <div style="height:10"></div>\n'
@@ -349,6 +352,7 @@ for idx in df_annot.sort_values(['label','group_id','image_basename','annot_num'
 #img_tmp.save(targ_file)    
 
 # TODO Set variables for various directories, so don't have to store full path names in arrays and src of images
+# TODO Put carriage returns between entries in dicts
 xref = {'image_dict':image_dict,    # In javascript, the Python list is an array
         'image_divs':image_divs,
         'annot_dict':annot_dict}
