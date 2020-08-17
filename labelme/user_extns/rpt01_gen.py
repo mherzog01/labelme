@@ -20,7 +20,8 @@ Assumptions
 2.  .json file for images (if it exists), is in the same folder as the image
 
 TODO *** Scan entire list below for priority tasks
-1. Improve performance of report
+1. Improve performance of report generation - save to a different format than .png
+1.1 Improve performance/cleanthliness of HTML
 - Use styles, not object-level HTML (e.g. onclick)
 - Break into separate files
 2. If click on image text, select whole image name
@@ -50,8 +51,6 @@ TODO *** Scan entire list below for priority tasks
 5.  Create map for each image - hover over each annotation and see different values
 6.  Double click on defect and launch LabelMe for that image
 7.  * In last section, images with no defects are not displayed.  nan is shown instead.
-8.  *** Create table of contents (by label)
-9.  ** Set title of report .html file
 10.  Display lot number.  Requires using database -- centralize annotations with data set?
 11. Comments
 """
@@ -80,7 +79,7 @@ def get_defect_intensity(group_id):
 
 #------------------------------------------
 # Settings
-run_mode = ['DEV','PROD'][1]
+run_mode = ['DEV','PROD'][0]
 create_img_exports = ['all','new','none'][1]  
 create_annot_exports = [ 'all','new','none'][1]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
@@ -179,6 +178,14 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     if create_annot_exports == 'all':
         for file in glob.glob(osp.join(export_annot_dir,export_annot_basestem + '*.png')):
             os.remove(file)
+        create_annot_images = True
+    elif create_annot_exports == 'none':
+        create_annot_images = False
+    elif create_annot_exports == 'new':
+        # create_annot_images will be set in logic below for each annotation
+        pass
+    else:
+        print(f'Invalid value for create_annot_exports={create_annot_exports}')
 
     for idx in df_shapes.index:
         row = df_shapes.loc[idx]
@@ -236,18 +243,11 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         export_annot_basename_a = export_annot_basestem + f'{label_clean}_{annot_num}_annot.png'
         export_annot_path_a = osp.join(export_annot_dir,export_annot_basename_a)        
 
-        if create_annot_exports == 'all':
-            create_annot_images = True
-        elif create_annot_exports == 'none':
-            create_annot_images = False
-        elif create_annot_exports == 'new':
+        if create_annot_exports == 'new':
             if osp.exists(export_annot_path) and osp.exists(export_annot_path_a):
                 create_annot_images = False
             else:
-                create_annot_images = True
-        else:
-            print(f'Invalid value for create_annot_exports={create_annot_exports}')
-            
+                create_annot_images = True            
                 
         if create_annot_images:
             # https://stackoverflow.com/questions/25795380/how-to-crop-a-image-and-save
@@ -319,20 +319,32 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     if create_image:
         img_pixmap.save(export_img_path)
 
-# 1.  Write HTML header (script) and report header [*Template needed]
-# 2.  For each label
-#        Write section header
-#        Write divs [*Template needed]
+# ------------------------------------------------
+# Set up variables for Template substitution
+# ------------------------------------------------
 
+df_annot_sort = df_annot.sort_values(['label','group_id','image_basename','annot_num'])
+
+# Table of contents (by label)
+toc = ''
+for cur_label in df_annot_sort['label'].unique():
+    toc += f'<div style="margin-left:20px"><a href="#{cur_label}">{cur_label}</a></div>\n'
+
+# Divs
 image_divs = ''
 prev_label = None
 prev_grp = None
-for idx in df_annot.sort_values(['label','group_id','image_basename','annot_num']).index:
-    row = df_annot.loc[idx]
+first_label = True
+for idx in df_annot_sort.index:
+    row = df_annot_sort.loc[idx]
     cur_label = row['label']
     cur_grp = row['group_id']
     if not prev_label or prev_label != cur_label:
-        image_divs += f'<h2>{cur_label}</h2>\n'
+        image_divs += f'<h2 id="{cur_label}">{cur_label}</h2>\n'
+        if first_label:
+            first_label = False
+        else:
+            image_divs += f'<a href="#top">Top</a>\n'
         prev_label = cur_label
         prev_grp = None
         new_label = True
@@ -355,7 +367,8 @@ for idx in df_annot.sort_values(['label','group_id','image_basename','annot_num'
 # TODO Put carriage returns between entries in dicts
 xref = {'image_dict':image_dict,    # In javascript, the Python list is an array
         'image_divs':image_divs,
-        'annot_dict':annot_dict}
+        'annot_dict':annot_dict,
+        'toc':toc}
 with open(rpt_path,'w') as f_o:
     with open(template_path) as f_t:
         for in_line in f_t:

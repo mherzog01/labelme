@@ -20,8 +20,8 @@ https://stackoverflow.com/questions/493296/css-display-an-image-resized-and-crop
 </style>
 <script language="JavaScript">
 //tissue_imgs=[["20200213-154422-Img - Test.bmp","20200213-154422-Img - Test_export.png"]]
-tissue_imgs = %image_dict;
-annot_imgs = %annot_dict;
+var tissue_imgs;
+var annot_imgs;
 function file_basename(file_path){
 	// TODO Use OS separator
 	basename = file_path.split(/[\\\/]/).pop();
@@ -56,6 +56,9 @@ function show_tissue_img(id, annot_idx, img_idx){
 	img_type = get_image_type(id, annot_idx,toggle=false);
 	window.open(tissue_imgs[img_idx][img_type],'_blank');
 }	
+tissue_imgs=%image_dict;
+annot_imgs=%annot_dict;
+
  </script>
 <!--
 <div class="crop" onclick="getimage('20200213-154422-Img - Test.bmp_0',0)">
@@ -64,6 +67,8 @@ function show_tissue_img(id, annot_idx, img_idx){
  </div>
  </div>
 -->
+<H1 id="top">Annotation Detail Report</h1>
+%toc
 %image_divs
 
 
