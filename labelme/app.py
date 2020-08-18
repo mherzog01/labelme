@@ -845,6 +845,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.output_dir = output_dir
 
         logger.debug(f'Loading initial data')
+        logger.debug(f'Filename={filename}')
         logger.debug(f'Output dir={output_dir}')
         logger.debug(f'Output file={output_file}')
 
@@ -873,6 +874,7 @@ class MainWindow(QtWidgets.QMainWindow):
         gt_grp_transforms.append(lambda x:x.lower())
         self.gt_grp_transforms = gt_grp_transforms
 
+        logger.debug(f'Initialing load of data to display')
         if filename is not None and osp.isdir(filename):
             self.importDirImages(filename, load=False)
         else:
@@ -900,8 +902,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.updateFileMenu()
         # Since loading the file may take some time,
         # make sure it runs in the background.
-        logger.debug(f'Initialing load of data to display')
         if self.filename is not None:
+            logger.debug(f'Loading initial image {self.filename}')
             self.queueEvent(functools.partial(self.loadFile, self.filename))
 
         # Callbacks:

@@ -80,6 +80,12 @@ import json
 def get_defect_intensity(group_id):
     return str(group_id) if not group_id == float('nan') else 'None'
 
+def save_mask(pixmap, mask_dir, subdir_name, img_basename):
+    targ_dir = osp.join(mask_dir,subdir_name)
+    if not osp.exists(targ_dir):
+        os.mkdir(targ_dir)
+    pixmap.save(img_basename)
+
 #------------------------------------------
 # Settings
 run_mode = ['DEV','PROD'][1]
@@ -94,12 +100,15 @@ if run_mode == 'PROD':
 else:
     label_dir = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\Annot\Ground Truth'
     classes_file_path = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\classes.txt'
+
+rpt_basename = 'rpt01.html'
 run_rpt = [True,False][0]
 #------------------------------------------
     
 module_folder = osp.dirname(__file__)
 template_path = osp.join(module_folder,'rpt01_template.html')
 export_root = osp.join(label_dir, '..','..','util','export_images')
+
 export_img_dir = osp.join(export_root,'annotation_exports')
 export_annot_dir = osp.join(export_root,'annotation_exports_single')
 export_img_mask_dir = osp.join(export_root,'annotation_masks')
@@ -112,14 +121,11 @@ if create_img_masks != 'none' or create_annot_masks != 'none':
     else:
         with open(classes_file_path,'r') as f:
             classes = json.load(f)
-            min_color = 50
-            mask_color_mult = int((255 - min_color) / max([int(c) for c in classes]))
-            label_to_class = {classes[c]['name']:{'class':c, 'color':int(c) * mask_color_mult + min_color} for c in classes}
+            label_to_class = {classes[c]['name']:c for c in classes}
 
 # The report depends on current state of image annotations, so prior versions may not have integrity
 #rpt_stem = 'rpt01'
 #rpt_name = f'{rpt_stem}_{datetime.datetime.now():%Y%M%D_%h%m%s}.html'
-rpt_basename = 'rpt01.html'
 rpt_path = osp.join(export_root, rpt_basename)
 
 LABEL_COLORMAP = user_extns.get_colormap()
@@ -151,10 +157,13 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     if not obj_annots.cur_image_shapes:
         continue
     
+    #TODO Centralize logic in creating all names.  Deletion, and possibly other logic makes naming assumptions.
     img_basestem, img_ext = osp.splitext(img_basename)
     export_img_basename = img_basestem + '_export.png'
     export_img_path = osp.join(export_img_dir,export_img_basename)
-    export_img_mask_basename = img_basestem + '_export_mask.png'
+    export_img_mask_basestem = f'{img_basestem}_export_mask'
+    export_img_mask_basename = export_img_mask_basestem + '.png'
+    export_annot_basestem = f'{img_basestem}_export'
     
     if create_img_exports == 'all':
         create_image = True
@@ -164,6 +173,17 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         create_image = not osp.exists(export_img_path)        
     else:
         print(f'Invalid value for create_img_exports={create_img_exports}')
+
+    if create_img_masks == 'all':
+        for file in glob.glob(osp.join(export_img_mask_dir,'**',export_annot_basestem + '*.png'), recursive=True):
+            os.remove(file)
+        create_image_mask = True
+    elif create_img_masks == 'none':
+        create_image_mask = False
+    elif create_img_masks == 'new':
+        create_image_mask = None
+    else:
+        print(f'Invalid value for create_img_masks={create_img_masks}')
 
     image_dict[img_num] = [img_path, export_img_path]
     
@@ -184,15 +204,53 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     df_grp = df_shapes.groupby('label').cumcount()+1
     for idx in df_grp.index:
         df_annot.loc[idx,'label_instance'] = df_grp.loc[idx]
+    df_shapes = df_shapes.sort_values(['label','image_basename','label_instance'])
     
     # Paint annotations
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
     # TODO don't paint if 'create_image' == False and 'create_annot' == False.  However, if create_annot_exports == 'new', 'create_annot' is set below 
     p_img = QtGui.QPainter(img_pixmap)
-    p_img_mask = QtGui.QPainter(img_pixmap_mask)
-    
-    #TODO Centralize logic in creating all names.  Deletion, and possibly other logic makes naming assumptions.
-    export_annot_basestem = f'{img_basestem}_export_'
+   
+    # Paint and save entire tissue images
+    prev_label = None
+    for idx in df_shapes.index:
+        row = df_shapes.loc[idx]
+        s_obj = row['shape_obj']  
+        if not hasattr(s_obj,'label'):
+            continue
+        label = s_obj.label
+
+        # TODO *Make colors consistent with labelMe
+        if label and not label in label_colors:
+            label_colors[s_obj.label] = QtGui.QColor(*LABEL_COLORMAP[len(label_colors) % num_colors])
+        
+        first_pt_q = None
+        for pt in s_obj.points:
+            if not first_pt_q:
+                first_pt_q = pt
+        s_obj.addPoint(first_pt_q)
+        #s_obj.close = True
+        s_obj.fill = False
+        s_obj.point_size = 0
+        # TODO - draw text label and shape # of annotation next to shape
+        # TODO Get the scale value more intelligently?  canvas.scale -> widget scale factor via canvas.update?
+        s_obj.scale = 1 / 2
+        s_obj.line_color = label_colors[s_obj.label]
+        s_obj.paint(p_img)
+        
+        s_obj.fill = True
+        if s_obj.label in label_to_class:
+            export_img_mask_basename = 
+            if not prev_label or prev_label != s_obj.label:
+                if prev_label:
+                    save_mask(p_img_mask, export_img_mask_dir, s_obj.label, )
+                p_img_mask = QtGui.QPainter(img_pixmap_mask)
+            class_color_value = label_to_class[s_obj.label]
+            color = QtGui.QColor(*[int(class_color_value)]*3)
+            s_obj.line_color = color
+            s_obj.fill_color = color
+            s_obj.paint(p_img_mask)
+
 
     # Delete all annotations of the image, if desired
     if create_annot_exports == 'all':
@@ -207,22 +265,8 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     else:
         print(f'Invalid value for create_annot_exports={create_annot_exports}')
 
-*********** Set image name based on label
-*********** Set image name based on label - same for single
-    export_img_mask_path = osp.join(export_img_mask_dir,export_img_mask_basename)
-    if create_img_masks == 'all':
-        for file in glob.glob(osp.join(export_annot_mask_dir,export_annot_basestem + '*.png')):
-            os.remove(file)
-        create_image_mask = True
-    elif create_img_masks == 'none':
-        create_image_mask = False
-    elif create_img_masks == 'new':
-        create_image_mask = None
-    else:
-        print(f'Invalid value for create_img_masks={create_img_masks}')
-
     if create_annot_masks == 'all':
-        for file in glob.glob(osp.join(export_annot_mask_dir,export_annot_basestem + '*.png')):
+        for file in glob.glob(osp.join(export_annot_mask_dir,'**',export_annot_basestem + '*.png'), recursive=True):
             os.remove(file)
         create_annot_mask = True
     elif create_annot_masks == 'none':
@@ -233,6 +277,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     else:
         print(f'Invalid value for create_annot_masks={create_annot_masks}')
 
+    # Paint and save entire tissue images
     for idx in df_shapes.index:
         row = df_shapes.loc[idx]
         annot_num = row['annot_num']  # Unique within an image
@@ -270,8 +315,8 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         
         s_obj.fill = True
         if s_obj.label in label_to_class:
-            class_color_value = label_to_class[s_obj.label]['color']
-            color = QtGui.QColor(*(int(class_color_value),)*3)
+            class_color_value = label_to_class[s_obj.label]
+            color = QtGui.QColor(*[int(class_color_value)]*3)
             s_obj.line_color = color
             s_obj.fill_color = color
             s_obj.paint(p_img_mask)
@@ -291,14 +336,18 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         # Create images for the annotation
         # ------------------
         label_clean = s_obj.label.replace('/','')
-        export_annot_basename = export_annot_basestem + f'{label_clean}_{annot_num}.png'
-        export_annot_path = osp.join(export_annot_dir,export_annot_basename)        
+        export_annot_basename = export_annot_basestem + f'_{label_clean}_{annot_num}.png'
+        export_annot_path = osp.join(export_annot_dir,
+                                     export_annot_basename)        
 
-        export_annot_basename_a = export_annot_basestem + f'{label_clean}_{annot_num}_annot.png'
-        export_annot_path_a = osp.join(export_annot_dir,export_annot_basename_a)        
+        export_annot_basename_a = export_annot_basestem + f'_{label_clean}_{annot_num}_annot.png'
+        export_annot_path_a = osp.join(export_annot_dir,
+                                       export_annot_basename_a)        
 
-        export_annot_mask_basename = export_annot_basestem + f'mask_{label_clean}_{annot_num}.png'
-        export_annot_mask_path = osp.join(export_annot_mask_dir,export_annot_mask_basename)        
+        export_annot_mask_basename = export_annot_basestem + f'_mask_{label_clean}_{annot_num}.png'
+        export_annot_mask_path = osp.join(export_annot_mask_dir,
+                                          label_clean,
+                                          export_annot_mask_basename)        
 
         if create_annot_exports == 'new':
             if osp.exists(export_annot_path) and osp.exists(export_annot_path_a):
@@ -366,21 +415,6 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         image_divs += f' </div>\n'
         image_divs += f' </div>\n'
 
-        # The following is for entire images.  We are using a different approach
-        # image_divs = ''
-        # image_divs += f'<div class="crop">\n'
-        # image_divs += f'  <div class="crop" style="width:{img_div_width};height:{img_div_height}" '
-        # image_divs += f'       onclick="getimage(\'{img_id}\',{img_num})"'
-        # image_divs += f'       title="{s_obj.label}, Intensity: {get_defect_intensity(s_obj.group_id), {img_basename}}">\n'
-        # image_divs += f'    <img id="{img_id}" src="{export_img_path}" alt="{img_basename} {s_obj.label}" style="margin-top:-{margin_top};margin-left:-{margin_left};">\n'
-        # image_divs += f'  </div>\n'
-        # image_divs += f'  <div style="width:{img_div_width}">\n'
-        # image_divs += f'    {img_basename}, {annot_num}\n'
-        # if any(s_obj.flags.values()):
-        #     image_divs += f'    <br>{", ".join([key for key in s_obj.flags if s_obj.flags[key]])}\n'
-        # image_divs += f'    <div style="height:5"></div>\n'
-        # image_divs += f' </div>\n'
-        # image_divs += f' </div>\n'
         df_annot.loc[idx,'divs'] = image_divs
     
     p_img.end()
@@ -388,8 +422,6 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     
     if create_image:
         img_pixmap.save(export_img_path)
-    if create_image_mask:
-        img_pixmap_mask.save(export_img_mask_path)
 
 # ------------------------------------------------
 # Set up variables for Template substitution
