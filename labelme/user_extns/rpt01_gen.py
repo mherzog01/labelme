@@ -75,6 +75,7 @@ import string
 import shutil
 import datetime
 import pandas as pd
+import json
 
 def get_defect_intensity(group_id):
     return str(group_id) if not group_id == float('nan') else 'None'
@@ -84,11 +85,16 @@ def get_defect_intensity(group_id):
 run_mode = ['DEV','PROD'][0]
 create_img_exports = ['all','new','none'][1]  
 create_annot_exports = [ 'all','new','none'][1]
+create_img_masks = ['all','new','none'][0]  
+create_annot_masks = [ 'all','new','none'][0]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
 if run_mode == 'PROD':
     label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
+    classes_file_path = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\cfg\classes.txt'
 else:
-    label_dir = r'c:\tmp\work4\Annot\Ground Truth'
+    label_dir = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\Annot\Ground Truth'
+    classes_file_path = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\classes.txt'
+run_rpt = [True,False][0]
 #------------------------------------------
     
 module_folder = osp.dirname(__file__)
@@ -96,7 +102,19 @@ template_path = osp.join(module_folder,'rpt01_template.html')
 export_root = osp.join(label_dir, '..','..','util','export_images')
 export_img_dir = osp.join(export_root,'annotation_exports')
 export_annot_dir = osp.join(export_root,'annotation_exports_single')
-#label_dir = r'c:\tmp\work4'
+export_img_mask_dir = osp.join(export_root,'annotation_masks')
+export_annot_mask_dir = osp.join(export_root,'annotation_masks_single')
+
+if create_img_masks != 'none' or create_annot_masks != 'none':
+    if not osp.exists(classes_file_path):
+        print('ERROR:  Need to create masks, but can\'t find classes file {classes_file_path}')
+        raise ValueError
+    else:
+        with open(classes_file_path,'r') as f:
+            classes = json.load(f)
+            min_color = 50
+            mask_color_mult = int((255 - min_color) / max([int(c) for c in classes]))
+            label_to_class = {classes[c]['name']:{'class':c, 'color':int(c) * mask_color_mult + min_color} for c in classes}
 
 # The report depends on current state of image annotations, so prior versions may not have integrity
 #rpt_stem = 'rpt01'
@@ -110,9 +128,6 @@ num_colors = len(LABEL_COLORMAP)
 
 image_dict = {} # Xref images of entire tissue with and without annotations
 annot_dict = {} # Xref images of individual annotations with and without annotation boundaries displayed
-
-if osp.exists(rpt_path):
-    os.remove(rpt_path)
 
 obj_annots = user_extns.AnnotDf()
 df_annot = obj_annots.df_annot
@@ -139,6 +154,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     img_basestem, img_ext = osp.splitext(img_basename)
     export_img_basename = img_basestem + '_export.png'
     export_img_path = osp.join(export_img_dir,export_img_basename)
+    export_img_mask_basename = img_basestem + '_export_mask.png'
     
     if create_img_exports == 'all':
         create_image = True
@@ -147,7 +163,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     elif create_img_exports == 'new':
         create_image = not osp.exists(export_img_path)        
     else:
-        print(f'Invalid value for create_image={create_image}')
+        print(f'Invalid value for create_img_exports={create_img_exports}')
 
     image_dict[img_num] = [img_path, export_img_path]
     
@@ -158,6 +174,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     img_pixmap = QtGui.QPixmap(img_path)
     img_pixmap_orig = img_pixmap.copy()
     img_size = img_pixmap.size()
+    img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
 
     # Organize images by label/annotation instance
     # Assume that df_shapes is a view of df_annot
@@ -172,6 +189,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
     # TODO don't paint if 'create_image' == False
     p_img = QtGui.QPainter(img_pixmap)
+    p_img_mask = QtGui.QPainter(img_pixmap_mask)
     
     #TODO Centralize logic in creating all names.  Deletion, and possibly other logic makes naming assumptions.
     export_annot_basestem = f'{img_basestem}_export_'
@@ -185,9 +203,35 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         create_annot_images = False
     elif create_annot_exports == 'new':
         # create_annot_images will be set in logic below for each annotation
-        pass
+        create_annot_images = None
     else:
         print(f'Invalid value for create_annot_exports={create_annot_exports}')
+
+*********** Set image name based on label
+*********** Set image name based on label - same for single
+    export_img_mask_path = osp.join(export_img_mask_dir,export_img_mask_basename)
+    if create_img_masks == 'all':
+        for file in glob.glob(osp.join(export_annot_mask_dir,export_annot_basestem + '*.png')):
+            os.remove(file)
+        create_image_mask = True
+    elif create_img_masks == 'none':
+        create_image_mask = False
+    elif create_img_masks == 'new':
+        create_image_mask = None
+    else:
+        print(f'Invalid value for create_img_masks={create_img_masks}')
+
+    if create_annot_masks == 'all':
+        for file in glob.glob(osp.join(export_annot_mask_dir,export_annot_basestem + '*.png')):
+            os.remove(file)
+        create_annot_mask = True
+    elif create_annot_masks == 'none':
+        create_annot_mask = False
+    elif create_annot_masks == 'new':
+        # create_annot_mask will be set in logic below for each annotation
+        create_annot_mask = None
+    else:
+        print(f'Invalid value for create_annot_masks={create_annot_masks}')
 
     for idx in df_shapes.index:
         row = df_shapes.loc[idx]
@@ -224,6 +268,14 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         s_obj.line_color = label_colors[s_obj.label]
         s_obj.paint(p_img)
         
+        s_obj.fill = True
+        if s_obj.label in label_to_class:
+            class_color_value = label_to_class[s_obj.label]['color']
+            color = QtGui.QColor(*(int(class_color_value),)*3)
+            s_obj.line_color = color
+            s_obj.fill_color = color
+            s_obj.paint(p_img_mask)
+        
         # Get bounding region of image.  ll = Lower Left, ur = Upper Right
         roi_ll = (max(0,min_w - selection_margin), min(img_size.height(),max_h + selection_margin))
         roi_ur = (min(img_size.width(),max_w + selection_margin), max(0,min_h - selection_margin))
@@ -245,16 +297,26 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         export_annot_basename_a = export_annot_basestem + f'{label_clean}_{annot_num}_annot.png'
         export_annot_path_a = osp.join(export_annot_dir,export_annot_basename_a)        
 
+        export_annot_mask_basename = export_annot_basestem + f'mask_{label_clean}_{annot_num}.png'
+        export_annot_mask_path = osp.join(export_annot_mask_dir,export_annot_mask_basename)        
+
         if create_annot_exports == 'new':
             if osp.exists(export_annot_path) and osp.exists(export_annot_path_a):
                 create_annot_images = False
             else:
                 create_annot_images = True            
                 
+        if create_annot_masks == 'new':
+            if osp.exists(export_annot_mask_path):
+                create_annot_mask = False
+            else:
+                create_annot_mask = True            
+                
+        roi_ll_q = QtCore.QPoint(margin_left,margin_top)
+        roi_q = QtCore.QRect(roi_ll_q,QtCore.QSize(img_div_width,img_div_height))
+
         if create_annot_images:
             # https://stackoverflow.com/questions/25795380/how-to-crop-a-image-and-save
-            roi_ll_q = QtCore.QPoint(margin_left,margin_top)
-            roi_q = QtCore.QRect(roi_ll_q,QtCore.QSize(img_div_width,img_div_height))
 
             # Unannotated image
             annot_pixmap = img_pixmap_orig.copy(roi_q)
@@ -275,6 +337,11 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
             #     p_annot.end()
             annot_pixmap_a.save(export_annot_path_a)
             
+        if create_annot_mask:
+            annot_pixmap_mask = img_pixmap_mask.copy(roi_q)
+            annot_pixmap_mask.save(export_annot_mask_path)
+            
+
         annot_dict[annot_id] = [export_annot_path, export_annot_path_a]
         
         # ------------------
@@ -317,70 +384,76 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         df_annot.loc[idx,'divs'] = image_divs
     
     p_img.end()
+    p_img_mask.end()
     
     if create_image:
         img_pixmap.save(export_img_path)
+    if create_image_mask:
+        img_pixmap_mask.save(export_img_mask_path)
 
 # ------------------------------------------------
 # Set up variables for Template substitution
 # ------------------------------------------------
-
-df_annot_sort = df_annot.sort_values(['label','group_id','image_basename','annot_num'])
-
-# Table of contents (by label)
-toc = ''
-for cur_label in df_annot_sort['label'].unique():
-    toc += f'<div style="margin-left:20px"><a href="#{cur_label}">{cur_label}</a></div>\n'
-
-# Divs
-image_divs = ''
-prev_label = None
-prev_grp = None
-first_label = True
-for idx in df_annot_sort.index:
-    row = df_annot_sort.loc[idx]
-    cur_label = row['label']
-    cur_grp = row['group_id']
-    if not prev_label or prev_label != cur_label:
-        image_divs += f'<h2 id="{cur_label}">{cur_label}</h2>\n'
-        if first_label:
-            first_label = False
+if run_rpt:
+    df_annot_sort = df_annot.sort_values(['label','group_id','image_basename','annot_num'])
+    
+    # Table of contents (by label)
+    toc = ''
+    for cur_label in df_annot_sort['label'].unique():
+        toc += f'<div style="margin-left:20px"><a href="#{cur_label}">{cur_label}</a></div>\n'
+    
+    # Divs
+    image_divs = ''
+    prev_label = None
+    prev_grp = None
+    first_label = True
+    for idx in df_annot_sort.index:
+        row = df_annot_sort.loc[idx]
+        cur_label = row['label']
+        cur_grp = row['group_id']
+        if not prev_label or prev_label != cur_label:
+            image_divs += f'<h2 id="{cur_label}">{cur_label}</h2>\n'
+            if first_label:
+                first_label = False
+            else:
+                image_divs += f'<a href="#top">Top</a>\n'
+            prev_label = cur_label
+            prev_grp = None
+            new_label = True
         else:
-            image_divs += f'<a href="#top">Top</a>\n'
-        prev_label = cur_label
-        prev_grp = None
-        new_label = True
-    else:
-        new_label = False
-    if new_label or prev_grp != cur_grp:
-        image_divs += f'<h3>Defect Intensity: {get_defect_intensity(cur_grp) }</h3>\n'
-        prev_grp = cur_grp
-    image_div = df_annot.loc[idx,'divs']
-    # If image_div is empty, it will be float('nan').  Unfortunately, image_div == float('nan') does not seem to work.
-    if isinstance(image_div,str):
-        image_divs += image_div
-        
-#TODO Move to PIL without saving to disk in order 
-#img_tmp = Image.open(targ_f.ile)
-#img_tmp = img_tmp.convert("L")
-#img_tmp.save(targ_file)    
-
-# TODO Set variables for various directories, so don't have to store full path names in arrays and src of images
-# TODO Put carriage returns between entries in dicts
-xref = {'image_dict':image_dict,    # In javascript, the Python list is an array
-        'image_divs':image_divs,
-        'annot_dict':annot_dict,
-        'toc':toc}
-with open(rpt_path,'w') as f_o:
-    with open(template_path) as f_t:
-        for in_line in f_t:
-            out_line = in_line
-            # Escape $
-            out_line = out_line.replace('$','$$')
-            # Substitute % for $
-            out_line = out_line.replace('%','$')
-            template = string.Template(out_line)
-            out_line = template.substitute(xref)
-            f_o.write(out_line)
+            new_label = False
+        if new_label or prev_grp != cur_grp:
+            image_divs += f'<h3>Defect Intensity: {get_defect_intensity(cur_grp) }</h3>\n'
+            prev_grp = cur_grp
+        image_div = df_annot.loc[idx,'divs']
+        # If image_div is empty, it will be float('nan').  Unfortunately, image_div == float('nan') does not seem to work.
+        if isinstance(image_div,str):
+            image_divs += image_div
+            
+    #TODO Move to PIL without saving to disk in order 
+    #img_tmp = Image.open(targ_f.ile)
+    #img_tmp = img_tmp.convert("L")
+    #img_tmp.save(targ_file)    
+    
+    if osp.exists(rpt_path):
+        os.remove(rpt_path)
+    
+    # TODO Set variables for various directories, so don't have to store full path names in arrays and src of images
+    # TODO Put carriage returns between entries in dicts
+    xref = {'image_dict':image_dict,    # In javascript, the Python list is an array
+            'image_divs':image_divs,
+            'annot_dict':annot_dict,
+            'toc':toc}
+    with open(rpt_path,'w') as f_o:
+        with open(template_path) as f_t:
+            for in_line in f_t:
+                out_line = in_line
+                # Escape $
+                out_line = out_line.replace('$','$$')
+                # Substitute % for $
+                out_line = out_line.replace('%','$')
+                template = string.Template(out_line)
+                out_line = template.substitute(xref)
+                f_o.write(out_line)
 
 # TODO * Handle errors - clean up painter 

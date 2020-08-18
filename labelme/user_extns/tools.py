@@ -169,6 +169,7 @@ def launchExternalViewer(filename):
     
 
 # Exports a separate single-bit file for each image/defect combination    
+# TODO - combine with rpt01_gen.py.
 def exportAnnotationsForImage(img_file, label_dir, export_folder):
     
     if not osp.exists(img_file):
@@ -189,16 +190,16 @@ def exportAnnotationsForImage(img_file, label_dir, export_folder):
     labelFile = labelme.LabelFile(label_file)    
     labels_to_export = set([shape['label'] for shape in labelFile.shapes])
     print(f'labels_to_export={labels_to_export}')
+
+
+    pixmap_orig = QtGui.QPixmap(img_file)
+    pixmap_empty = QtGui.QPixmap(pixmap_orig.size())   # empty -- each point has value (0,0,0)
     for label in labels_to_export:
         shapes_to_export = [s for s in labelFile.shapes if s['label'] == label]
         #print(f'shapes_to_export={shapes_to_export}')
         print(f'# shapes_to_export for {label}={len(shapes_to_export)}')
 
-        # Load image to initialize the pixmap to the proper size
-        # Then, set all pixels to 0
-        # TODO Make more efficient.  Don't load file.  Create empty image with right size/attributes
-        pixmap = QtGui.QPixmap(img_file)
-        pixmap.fill(QtGui.QColor(0,0,0))
+        pixmap = pixmap_empty.copy()
         # Paint annotations
         # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
         p = QtGui.QPainter(pixmap)
@@ -207,7 +208,7 @@ def exportAnnotationsForImage(img_file, label_dir, export_folder):
              flags=s['flags'], group_id=s['group_id'])
             for pt in s['points']:
                 s_obj.addPoint(QtCore.QPointF(pt[0],pt[1]))
-            s_obj.close = True
+            #s_obj.close = True
             s_obj.fill = True
             s_obj.point_size = 0
             s_obj.paint(p)

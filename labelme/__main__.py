@@ -114,6 +114,10 @@ def main():
         sys.exit(0)
 
     logger.setLevel(getattr(logging, args.logger_level.upper()))
+    
+    logger.info(f'Log level={args.logger_level}')
+    logger.debug(f'File={__file__}')
+    logger.debug(f'Python path={sys.path}')
 
     if hasattr(args, 'flags'):
         if os.path.isfile(args.flags):

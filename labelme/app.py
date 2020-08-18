@@ -135,6 +135,7 @@ class MainWindow(QtWidgets.QMainWindow):
         output_file=None,
         output_dir=None,
     ):
+        logger.debug('Initializing MainWindow')
         if output is not None:
             logger.warning(
                 'argument output is deprecated, use output_file instead'
@@ -154,6 +155,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.dirty = False
 
         self._noSelectionSlot = False
+
+        logger.debug('Initializing user interface')
 
         # Main widgets and related state.
         self.labelDialog = LabelDialog(
@@ -841,6 +844,10 @@ class MainWindow(QtWidgets.QMainWindow):
         self.output_file = output_file
         self.output_dir = output_dir
 
+        logger.debug(f'Loading initial data')
+        logger.debug(f'Output dir={output_dir}')
+        logger.debug(f'Output file={output_file}')
+
         # Application state.
         self.image = QtGui.QImage()
         self.imagePath = None
@@ -893,6 +900,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.updateFileMenu()
         # Since loading the file may take some time,
         # make sure it runs in the background.
+        logger.debug(f'Initialing load of data to display')
         if self.filename is not None:
             self.queueEvent(functools.partial(self.loadFile, self.filename))
 
@@ -904,6 +912,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
+        logger.debug(f'Initialization complete')
 
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
