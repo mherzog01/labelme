@@ -82,7 +82,7 @@ def get_defect_intensity(group_id):
 
 #------------------------------------------
 # Settings
-run_mode = ['DEV','PROD'][0]
+run_mode = ['DEV','PROD'][1]
 create_img_exports = ['all','new','none'][1]  
 create_annot_exports = [ 'all','new','none'][1]
 create_img_masks = ['all','new','none'][0]  
@@ -187,7 +187,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     
     # Paint annotations
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
-    # TODO don't paint if 'create_image' == False
+    # TODO don't paint if 'create_image' == False and 'create_annot' == False.  However, if create_annot_exports == 'new', 'create_annot' is set below 
     p_img = QtGui.QPainter(img_pixmap)
     p_img_mask = QtGui.QPainter(img_pixmap_mask)
     
