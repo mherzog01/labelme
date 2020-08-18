@@ -514,7 +514,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         image_divs += f'  <div '
         image_divs += f'       onclick="getimage(\'{img_id}\',{annot_id})"'
         image_divs += f'       title="{s_obj.label}, Intensity: {get_defect_intensity(s_obj.group_id)}, {img_basename}">\n'
-        image_divs += f'    <img id="{img_id}" src="{0}" alt="{0} {s_obj.label}">\n'.format(dnm.export_annot['path'])
+        image_divs +=  '    <img id="{2}" src="{0}" alt="{0} {1}">\n'.format(dnm.export_annot['path'],s_obj.label,img_id)
         image_divs += f'  </div>\n'
         image_divs += f'  <div style="height:5"></div>\n'
         image_divs += f'  <div style="width:{img_div_width}">\n'
