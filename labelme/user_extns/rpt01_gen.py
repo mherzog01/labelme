@@ -271,6 +271,13 @@ df_annot['label_instance'].astype(int)
 
 # Needed to paint shapes
 app = QtWidgets.QApplication(sys.argv)
+
+# Quick and dirty cleanup of painters
+try:
+    p_img.end()
+    p_img_mask.end()
+except NameError:
+    pass
     
 label_colors = {}
 img_num = -1
@@ -297,7 +304,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         print(f'Invalid value for create_img_exports={create_img_exports}')
 
     if create_img_masks == 'all':
-        for file in glob.glob(osp.join(dnm.export_img_mask_dir,'**',dnm.export_img_mask['basestem'],'*.png'), recursive=True):
+        for file in glob.glob(osp.join(dnm.export_img_mask_dir,'**',dnm.export_img_mask['basestem'] + '*.png'), recursive=True):
             os.remove(file)
         create_image_mask = True
     elif create_img_masks == 'none':
@@ -316,7 +323,6 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     img_pixmap = QtGui.QPixmap(img_path)
     img_pixmap_orig = img_pixmap.copy()
     img_size = img_pixmap.size()
-    img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
 
     # Organize images by label/annotation instance
     # To avoid dealing with different representations of path separators, use the base name
@@ -337,6 +343,10 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     # Paint and save entire tissue images
     # ----------------------------------------- 
     prev_label = None
+    prev_dnm_info = None
+    img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
+    p_img_mask = QtGui.QPainter(img_pixmap_mask)
+    masks = {}
     for idx in df_shapes.index:
         row = df_shapes.loc[idx]
         s_obj = row['shape_obj']  
@@ -369,23 +379,29 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
             if create_img_masks == 'new':
                 create_image_mask = not osp.exists(dnm.export_img_mask['path'])
             if not prev_label or prev_label != s_obj.label:
-                p_img_mask = QtGui.QPainter(img_pixmap_mask)
                 if prev_label:
                     if create_image_mask:
+                        if not prev_dnm_info:
+                            print(f'ERROR:  no directory name info available.  Prev label={prev_label}.  Cur label={s_obj.label}')
+                            print(row)
+                            raise ValueError
                         save_subfolder(img_pixmap_mask, prev_dnm_info)
                     p_img_mask.end()
+                    masks[prev_label] = img_pixmap_mask
+                    img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
+                    p_img_mask = QtGui.QPainter(img_pixmap_mask)                    
                 prev_label = s_obj.label
                 prev_dnm_info = dnm.export_img_mask.copy()
             class_color_value = label_to_class[s_obj.label]
             color = QtGui.QColor(*[int(class_color_value)]*3)
             s_obj.line_color = color
             s_obj.fill_color = color
+            #print(f'Painting {row["image_basename"]}, label={row["label"]}, label_instance={row["label_instance"]}, color={color.getRgb()}')
             s_obj.paint(p_img_mask)
-        else:
-            create_image_mask = False
     if prev_label and create_image_mask:
         save_subfolder(img_pixmap_mask, dnm.export_img_mask)
         p_img_mask.end()
+        masks[s_obj.label] = img_pixmap_mask
     if create_image:
         img_pixmap.save(dnm.export_img['path'])
 
@@ -399,9 +415,9 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     # ----------------------------------------- 
     # Delete all annotations of the image along with the tissue region export, if desired
     if create_annot_exports == 'all':
-        for file in glob.glob(osp.join(dnm.export_annot_dir,'**',dnm.export_annot['basestem'],'*.png'), recursive=True):
+        for file in glob.glob(osp.join(dnm.export_annot_dir,'**',dnm.export_annot['basestem'] + '*.png'), recursive=True):
             os.remove(file)
-        for file in glob.glob(osp.join(dnm.export_annot_region_dir,'**',dnm.export_annot_region['basestem'],'*.png'), recursive=True):
+        for file in glob.glob(osp.join(dnm.export_annot_region_dir,'**',dnm.export_annot_region['basestem'] + '*.png'), recursive=True):
             os.remove(file)
         create_annot_images = True
     elif create_annot_exports == 'none':
@@ -413,7 +429,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         print(f'Invalid value for create_annot_exports={create_annot_exports}')
 
     if create_annot_masks == 'all':
-        for file in glob.glob(osp.join(dnm.export_annot_mask_dir,'**',dnm.export_annot_mask['basestem'],'*.png'), recursive=True):
+        for file in glob.glob(osp.join(dnm.export_annot_mask_dir,'**',dnm.export_annot_mask['basestem'] + '*.png'), recursive=True):
             os.remove(file)
         create_annot_mask = True
     elif create_annot_masks == 'none':
@@ -497,7 +513,8 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
             #     p_annot.end()
             save_subfolder(annot_pixmap_a, dnm.export_annot)
             
-        if create_annot_mask:
+        if s_obj.label in label_to_class and create_annot_mask:
+            img_pixmap_mask = masks[s_obj.label]
             annot_pixmap_mask = img_pixmap_mask.copy(roi_q)
             save_subfolder(annot_pixmap_mask, dnm.export_annot_mask)
             
