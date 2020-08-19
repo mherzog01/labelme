@@ -319,14 +319,14 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
     img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
 
     # Organize images by label/annotation instance
-    # Assume that df_shapes is a view of df_annot
     # To avoid dealing with different representations of path separators, use the base name
     df_shapes = df_annot.query(f'`image_basename` == "{img_basename}"')
     # https://stackoverflow.com/questions/37997668/pandas-number-rows-within-group-in-increasing-order
     df_grp = df_shapes.groupby('label').cumcount()+1
     for idx in df_grp.index:
         df_annot.loc[idx,'label_instance'] = df_grp.loc[idx]
-    df_shapes = df_shapes.sort_values(['label','image_basename','label_instance'])
+    # Requery -- df_shapes may not be a view
+    df_shapes = df_annot.query(f'`image_basename` == "{img_basename}"').sort_values(['label','image_basename','label_instance'])
     
     # Paint annotations
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
@@ -344,7 +344,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
             continue
         label = s_obj.label
         dnm.label_name = label
-        dnm.annot_instance = row['label_instance']
+        dnm.label_instance = row['label_instance']
 
         # TODO *Make colors consistent with labelMe
         if label and not label in label_colors:
@@ -367,21 +367,22 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         s_obj.fill = True
         if s_obj.label in label_to_class:
             if create_img_masks == 'new':
-                create_img_mask == osp.exists(dnm.export_img_mast['path'])
+                create_image_mask = not osp.exists(dnm.export_img_mask['path'])
             if not prev_label or prev_label != s_obj.label:
                 p_img_mask = QtGui.QPainter(img_pixmap_mask)
                 if prev_label:
                     if create_image_mask:
-                        save_subfolder(img_pixmap_mask, dnm.export_img_mask)
+                        save_subfolder(img_pixmap_mask, prev_dnm_info)
                     p_img_mask.end()
                 prev_label = s_obj.label
+                prev_dnm_info = dnm.export_img_mask.copy()
             class_color_value = label_to_class[s_obj.label]
             color = QtGui.QColor(*[int(class_color_value)]*3)
             s_obj.line_color = color
             s_obj.fill_color = color
             s_obj.paint(p_img_mask)
         else:
-            create_img_mask = False
+            create_image_mask = False
     if prev_label and create_image_mask:
         save_subfolder(img_pixmap_mask, dnm.export_img_mask)
         p_img_mask.end()
@@ -433,7 +434,7 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
             continue
         label = s_obj.label
         dnm.label_name = label
-        dnm.annot_instance = row['label_instance']
+        dnm.label_instance = row['label_instance']
 
         # TODO More pythonic way of handing min/max x/y
         min_w, max_w, min_h, max_h = (img_size.width(),0,img_size.height(),0)
