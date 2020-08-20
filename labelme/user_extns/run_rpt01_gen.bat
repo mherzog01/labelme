@@ -27,18 +27,19 @@ if not exist %targfile% (
 goto endcopy
 
 :use_env_rc
-echo User %curuser% -- using condarc %targfile% >> "%LOGFILE%" 2>&1
+echo User %curuser% -- using condarc %targfile% 
 
 :endcopy
 echo End finding/setting up condarc
 
 call C:\ProgramData\Anaconda3\condabin\activate.bat GUIAutomation 
 
-m:
-cd "m:\MSA\Util\export_images"
+set PYTHONPATH=\\Allergan.com\VDI\Users\MHerzo\my documents\github\labelme\labelme;\\Allergan.com\VDI\Users\MHerzo\my documents\github\labelme\labelme\user_extns
+set PYTHONPATH
 
-echo Running python gen_report.py
-call python gen_report.py
+set PGM=//Allergan.com/VDI/Users/MHerzo/my documents/github/labelme/labelme/user_extns/rpt01_gen.py
+echo Running python %PGM%
+call python "%PGM%"
 
 :EndStartup
 echo Process ends.  Return code=%ERRORLEVEL% 
