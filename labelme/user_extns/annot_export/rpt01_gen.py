@@ -56,7 +56,7 @@ TODO *** Scan entire list below for priority tasks
 10.  Display lot number.  Requires using database -- centralize annotations with data set?
 11. Comments
 12. Rename 'annotation_regions_single' to 'annotation_regions'
-13. Rename 'classes.txt' to 'classes.json'?
+13.  Use file_suffix in classes.json instead of calculating label_clean in DirNameMgr
 """
 
 
@@ -232,13 +232,15 @@ create_annot_masks = [ 'all','new','none'][1]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
 if run_mode == 'PROD':
     label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
-    classes_file_path = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\cfg\classes.txt'
+    classes_file_path = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\cfg\classes.json'
 else:
     label_dir = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\Annot\Ground Truth'
-    classes_file_path = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\classes.txt'
+    classes_file_path = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\classes.json'
 
 rpt_basename = 'rpt01.html'
 run_rpt = [True,False][0]
+
+min_intensity = 5
 #------------------------------------------
     
 dnm = DirNameMgr(label_dir)
@@ -329,13 +331,14 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
 
     # Organize images by label/annotation instance
     # To avoid dealing with different representations of path separators, use the base name
-    df_shapes = df_annot.query(f'`image_basename` == "{img_basename}"')
+    query_str = f'`image_basename` == "{img_basename}"'
+    df_shapes = df_annot.query(query_str)
     # https://stackoverflow.com/questions/37997668/pandas-number-rows-within-group-in-increasing-order
     df_grp = df_shapes.groupby('label').cumcount()+1
     for idx in df_grp.index:
         df_annot.loc[idx,'label_instance'] = df_grp.loc[idx]
     # Requery -- df_shapes may not be a view
-    df_shapes = df_annot.query(f'`image_basename` == "{img_basename}"').sort_values(['label','image_basename','label_instance'])
+    df_shapes = df_annot.query(query_str).sort_values(['label','image_basename','label_instance'])
     
     # Paint annotations
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
@@ -443,6 +446,8 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         annot_id = row.name # Unique identifier across all annotations in report
         s_obj = row['shape_obj']  
         if not hasattr(s_obj,'label'):
+            continue
+        if not row['group_id'] is None and row['group_id'] < min_intensity:
             continue
         label = s_obj.label
         dnm.label_name = label
