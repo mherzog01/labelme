@@ -13,7 +13,7 @@ import os
 
 def get_file_list(folder):
     file_list = glob.glob(osp.join(root_dir,folder,'**','*'), recursive=True)
-    file_list = [file.replace(osp.join(root_dir,folder),'') for file in file_list]
+    file_list = [file.replace(osp.join(root_dir,folder),'') for file in file_list if osp.isfile(file)]
     file_list = sorted(file_list)
     print(f'{folder}={len(file_list)}')
     #print(file_list[1])
@@ -72,14 +72,27 @@ print(f'Num diff={len(diff)}')
 # TODO Ensure 'region' has all of annot and masks 
 # TODO Ensure images are unique by just basename -- don't need folder
 
-xref = {e:None for e in region_reduced_l}
+all_files = annot_single_l + masks_single_l + region_single_l
+all_basenames = [osp.basename(f) for f in all_files]
+dups = [b for b in all_basenames if all_basenames.count(b) > 1]
+if dups:
+    print(f'Dupicates found:  {dups}')
+else:
+    print('No duplicates by basename found')    
+
+xref = {e:{} for e in region_reduced_l}
 
 # TODO ** key is region image (no folder name)
 for k,v in zip(annot_s_reduced_l,annot_single_l):
-    xref[k] = {'annot':v}
+    xref[k]['annot'] = v
 
 for k,v in zip(masks_s_reduced_l,masks_single_l):
-    xref[k] = {'masks':v}    
+    xref[k]['masks'] = v
     
 for k,v in zip(region_reduced_l,region_single_l):
-    xref[k] = {'region':v}        
+    xref[k]['region'] = v
+    
+print('\nNo Mask:')    
+for k in xref:
+    if not 'masks' in xref[k].keys(): 
+        print(k)    
