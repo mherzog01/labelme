@@ -37,6 +37,8 @@ from labelme.widgets import ZoomWidget
 import PIL 
 from PIL import Image
 
+import datetime
+
 #import cProfile
 
 #TODO:
@@ -74,7 +76,7 @@ from PIL import Image
 #    - If filter shows a single image, load that image
 #    - Provide an "x" button to quickly clear the filter
 #30.  View files in input directory using File Explorer
-
+#31.  If zoom into 9% or less, can't zoom out with mouse or Zoom tool.
 
 
 # FIXME
@@ -195,7 +197,22 @@ class MainWindow(QtWidgets.QMainWindow):
             self.loadFlags({k: False for k in config['flags']})
         self.flag_dock.setWidget(self.flag_widget)
         self.flag_widget.itemChanged.connect(self.setDirty)
-
+        
+        # Dock window - Statistics such as mouse position
+        self.stats_dock = QtWidgets.QDockWidget(self.tr(u'Statistics'), self)
+        self.stats_dock.setObjectName(u'StatsDock')
+        statsDockLayout = QtWidgets.QVBoxLayout()
+        statsDockLayout.setContentsMargins(0, 0, 0, 0)
+        statsDockLayout.setSpacing(0)
+        self.cursorPosition = QtWidgets.QLabel()
+        self.cursorPosition.setTextFormat(Qt.PlainText)
+        self.cursorPosition.setObjectName('cursorPosition')
+        #self.cursorPosition.setStyleSheet("font-weight: bold; color: red")
+        statsDockLayout.addWidget(self.cursorPosition)
+        statsWidget = QtWidgets.QWidget()
+        statsWidget.setLayout(statsDockLayout)
+        self.stats_dock.setWidget(statsWidget)
+        
         # Dock window - Label list
         self.labelList.itemSelectionChanged.connect(self.labelSelectionChanged)
         self.labelList.itemDoubleClicked.connect(self.editLabel)
@@ -346,6 +363,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 getattr(self, dock).setVisible(False)
 
         self.addDockWidget(Qt.RightDockWidgetArea, self.flag_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.stats_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.label_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.shape_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
@@ -767,6 +785,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.menus.view,
             (
                 self.flag_dock.toggleViewAction(),
+                self.stats_dock.toggleViewAction(),
                 self.label_dock.toggleViewAction(),
                 self.shape_dock.toggleViewAction(),
                 self.file_dock.toggleViewAction(),
@@ -910,12 +929,38 @@ class MainWindow(QtWidgets.QMainWindow):
         self.zoomWidget.valueChanged.connect(self.paintCanvas)
 
         self.populateModeActions()
+        
+        #Display mouse position every 100 ms
+        self.mouse_timer = QtCore.QTimer()
+        self.mouse_timer.timeout.connect(self.disp_mouse_pos)
+        self.mouse_timer.start(100)
 
         # self.firstStart = True
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
         logger.debug(f'Initialization complete')
-
+        
+    def disp_mouse_pos(self):
+        pos_desc = 'n/a'
+        if hasattr(self.canvas,'prevMovePoint'):
+            x = self.canvas.prevMovePoint.x()
+            y = self.canvas.prevMovePoint.y()
+            if x  >= 0 and y >= 0:
+                pos_desc = f'({x:.0f}, {y:.0f})'
+        
+        # TODO Use separate fields for cursor size and image size
+        img_shape = 'n/a'
+        if hasattr(self, 'image') and hasattr(self.image, 'size'):
+            img_shape = f'{self.image.size().height()}x{self.image.size().width()}'
+        zoom_pct=''
+        if hasattr(self, 'canvas') and hasattr(self.canvas, 'scale'):
+            zoom_pct = f',  Zoom:  {self.canvas.scale:.0%}'
+        self.cursorPosition.setText(f'Cursor pos: {pos_desc},  Img size: {img_shape}{zoom_pct}')
+        #self.cursorPosition.setText(f'{datetime.datetime.now():%Y%m%d %H:%M:%S}: {pos_desc}')
+        #TODO This function may be getting called several times
+        #print(f'{datetime.datetime.now():%Y%m%d %H:%M:%S}:  Cur pos={self.cursorPosition.text()}')
+        self.mouse_timer.start(100)
+        
     def menu(self, title, actions=None):
         menu = self.menuBar().addMenu(title)
         if actions:
