@@ -55,6 +55,8 @@ TODO *** Scan entire list below for priority tasks
 8.  Change name from /util to /reports
 10.  Display lot number.  Requires using database -- centralize annotations with data set?
 11. Comments
+12. Rename 'annotation_regions_single' to 'annotation_regions'
+13.  Use file_suffix in classes.json instead of calculating label_clean in DirNameMgr
 """
 
 
@@ -222,21 +224,23 @@ class DirNameMgr():
 
 #------------------------------------------
 # Settings
-run_mode = ['DEV','PROD'][0]
+run_mode = ['DEV','PROD'][1]
 create_img_exports = ['all','new','none'][1]  
 create_annot_exports = [ 'all','new','none'][1]
-create_img_masks = ['all','new','none'][0]  
-create_annot_masks = [ 'all','new','none'][0]
+create_img_masks = ['all','new','none'][1]  
+create_annot_masks = [ 'all','new','none'][1]
 selection_margin = 100  # Number of pixels that surround the selected area of the image
 if run_mode == 'PROD':
     label_dir = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\Annot\Ground Truth'
-    classes_file_path = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\cfg\classes.txt'
+    classes_file_path = r'\\ussomgensvm00.allergan.com\lifecell\Depts\Tissue Services\Tmp\MSA\cfg\classes.json'
 else:
     label_dir = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\Annot\Ground Truth'
-    classes_file_path = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\classes.txt'
+    classes_file_path = r'C:\Users\mherzo\Box Sync\Herzog_Michael - Personal Folder\2020\Machine Vision Misc\Image Annotation\classes.json'
 
 rpt_basename = 'rpt01.html'
 run_rpt = [True,False][0]
+
+min_intensity = 5
 #------------------------------------------
     
 dnm = DirNameMgr(label_dir)
@@ -278,7 +282,8 @@ try:
     p_img_mask.end()
 except NameError:
     pass
-    
+
+
 label_colors = {}
 img_num = -1
 for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
@@ -326,87 +331,81 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
 
     # Organize images by label/annotation instance
     # To avoid dealing with different representations of path separators, use the base name
-    df_shapes = df_annot.query(f'`image_basename` == "{img_basename}"')
+    query_str = f'`image_basename` == "{img_basename}"'
+    df_shapes = df_annot.query(query_str)
     # https://stackoverflow.com/questions/37997668/pandas-number-rows-within-group-in-increasing-order
     df_grp = df_shapes.groupby('label').cumcount()+1
     for idx in df_grp.index:
         df_annot.loc[idx,'label_instance'] = df_grp.loc[idx]
     # Requery -- df_shapes may not be a view
-    df_shapes = df_annot.query(f'`image_basename` == "{img_basename}"').sort_values(['label','image_basename','label_instance'])
+    df_shapes = df_annot.query(query_str).sort_values(['label','image_basename','label_instance'])
     
     # Paint annotations
     # TODO Centralize annotation painting logic -- it exists here and several other places (app.exportMasks, etc.).  Use util/shape_to_mask or examples/.../draw_json.py
     # TODO don't paint if 'create_image' == False and 'create_annot' == False.  However, if create_annot_exports == 'new', 'create_annot' is set below 
+
     p_img = QtGui.QPainter(img_pixmap)
    
     # ----------------------------------------- 
     # Paint and save entire tissue images
+    #
+    # Process in groups by label for masks
     # ----------------------------------------- 
-    prev_label = None
-    prev_dnm_info = None
-    img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
-    p_img_mask = QtGui.QPainter(img_pixmap_mask)
+    label_list = set(df_shapes['label'])
     masks = {}
-    for idx in df_shapes.index:
-        row = df_shapes.loc[idx]
-        s_obj = row['shape_obj']  
-        if not hasattr(s_obj,'label'):
-            continue
-        label = s_obj.label
-        dnm.label_name = label
-        dnm.label_instance = row['label_instance']
+    for label in label_list:
+        img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
+        p_img_mask = QtGui.QPainter(img_pixmap_mask)
 
-        # TODO *Make colors consistent with labelMe
-        if label and not label in label_colors:
-            label_colors[s_obj.label] = QtGui.QColor(*LABEL_COLORMAP[len(label_colors) % num_colors])
-        
-        first_pt_q = None
-        for pt in s_obj.points:
-            if not first_pt_q:
-                first_pt_q = pt
-        s_obj.addPoint(first_pt_q)
-        #s_obj.close = True
-        s_obj.fill = False
-        s_obj.point_size = 0
-        # TODO - draw text label and shape # of annotation next to shape
-        # TODO Get the scale value more intelligently?  canvas.scale -> widget scale factor via canvas.update?
-        s_obj.scale = 1 / 2
-        s_obj.line_color = label_colors[s_obj.label]
-        s_obj.paint(p_img)
-        
-        s_obj.fill = True
-        if s_obj.label in label_to_class:
-            if create_img_masks == 'new':
-                create_image_mask = not osp.exists(dnm.export_img_mask['path'])
-            if not prev_label or prev_label != s_obj.label:
-                if prev_label:
-                    if create_image_mask:
-                        if not prev_dnm_info:
-                            print(f'ERROR:  no directory name info available.  Prev label={prev_label}.  Cur label={s_obj.label}')
-                            print(row)
-                            raise ValueError
-                        save_subfolder(img_pixmap_mask, prev_dnm_info)
-                    p_img_mask.end()
-                    masks[prev_label] = img_pixmap_mask
-                    img_pixmap_mask = QtGui.QPixmap(img_size)   # Empty -- all pixels have value (0,0,0)
-                    p_img_mask = QtGui.QPainter(img_pixmap_mask)                    
-                prev_label = s_obj.label
-                prev_dnm_info = dnm.export_img_mask.copy()
+        dnm.label_name = label
+
+        for idx in df_shapes.query(f'`label` == "{label}"').index:
+            row = df_shapes.loc[idx]
+            s_obj = row['shape_obj']  
+            if not hasattr(s_obj,'label'):
+                continue
+            
+            dnm.label_instance = row['label_instance']
+    
+            # TODO *Make colors consistent with labelMe
+            if label and not label in label_colors:
+                label_colors[s_obj.label] = QtGui.QColor(*LABEL_COLORMAP[len(label_colors) % num_colors])
+            
+            first_pt_q = None
+            for pt in s_obj.points:
+                if not first_pt_q:
+                    first_pt_q = pt
+            s_obj.addPoint(first_pt_q)
+            #s_obj.close = True
+            s_obj.fill = False
+            s_obj.point_size = 0
+            # TODO - draw text label and shape # of annotation next to shape
+            # TODO Get the scale value more intelligently?  canvas.scale -> widget scale factor via canvas.update?
+            s_obj.scale = 1 / 2
+            s_obj.line_color = label_colors[s_obj.label]
+            s_obj.paint(p_img)
+            
+            s_obj.fill = True
             class_color_value = label_to_class[s_obj.label]
             color = QtGui.QColor(*[int(class_color_value)]*3)
             s_obj.line_color = color
             s_obj.fill_color = color
             #print(f'Painting {row["image_basename"]}, label={row["label"]}, label_instance={row["label_instance"]}, color={color.getRgb()}')
             s_obj.paint(p_img_mask)
-    if prev_label and create_image_mask:
-        save_subfolder(img_pixmap_mask, dnm.export_img_mask)
         p_img_mask.end()
-        masks[s_obj.label] = img_pixmap_mask
+            
+        if label in label_to_class:
+            if create_img_masks == 'new':
+                create_image_mask = not osp.exists(dnm.export_img_mask['path'])
+            if create_image_mask:
+                save_subfolder(img_pixmap_mask, dnm.export_img_mask)
+        masks[label] = img_pixmap_mask
+        
+    # TODO Not clear if need to end painters
+    p_img.end()
     if create_image:
         img_pixmap.save(dnm.export_img['path'])
 
-    # TODO Not clear if need to end painters
-    p_img.end()
 
     # ----------------------------------------- 
     # Create annotation-level images
@@ -447,6 +446,8 @@ for img_path in glob.glob(osp.join(label_dir,"*.bmp")):
         annot_id = row.name # Unique identifier across all annotations in report
         s_obj = row['shape_obj']  
         if not hasattr(s_obj,'label'):
+            continue
+        if not row['group_id'] is None and row['group_id'] < min_intensity:
             continue
         label = s_obj.label
         dnm.label_name = label
