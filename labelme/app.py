@@ -77,6 +77,8 @@ import datetime
 #    - Provide an "x" button to quickly clear the filter
 #30.  View files in input directory using File Explorer
 #31.  If zoom into 9% or less, can't zoom out with mouse or Zoom tool.
+#32.  In info, Display who modified a .json and the mod date
+#33.  In info, make possible to copy/paste data
 
 
 # FIXME
@@ -108,6 +110,7 @@ import datetime
 # - Ability to edit current "Annotation Session Groups" file (in Notepad)
 # - Test - if change output dir
 # - Hide annotation dock by default
+# - Display mode in title or other way to know what mode you are in without checking menu.
 # - Turn off shapes in shape list by Annotator or defect.  Use text entry instead of annotation dock?
 # - * Complete locking of non-GT shapes:
 #     > Don't allow Delete key 
@@ -118,6 +121,8 @@ import datetime
 # - Calc IoU.  Weight IoU based on size of Ground Truth (use shapely)
 # - Add GT to ./testing scripts
 # - If delete label file, in GT mode don't hide image - continue to show existing annotations
+# Enable filters for Annotators and defect type
+# If switch to Ground Truth mode, automatically switch to the top-level dirname (e.g. m:\msa\annot)
 
 
 
@@ -303,7 +308,7 @@ class MainWindow(QtWidgets.QMainWindow):
   
         self.annotationSessionList = QtWidgets.QListWidget()
         #TODO Get from config file and glob
-        valueList = ['SME A Sarvey, T1','SME A Sarvey, T2','SME A Sarvey, T3','SME R Jabbal, T1','SME R Jabbal, T2','SME R Jabbal, T3','SME T Canty, T1','SME T Canty, T2','SME T Canty, T3']
+        valueList = ['SME A Sarvey, T1','SME A Sarvey, T2','SME A Sarvey, T3','SME R Jabbal, T1','SME R Jabbal, T2','SME R Jabbal, T3','SME E Rapp, T1','SME E Rapp, T2','SME E Rapp, T3']
         self.annotationSessionList = QtWidgets.QListWidget()
         for value in valueList:
               listItem = QtWidgets.QListWidgetItem(value)
