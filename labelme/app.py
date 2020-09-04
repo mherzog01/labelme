@@ -36,6 +36,7 @@ from labelme.widgets import ZoomWidget
 
 import PIL 
 from PIL import Image
+import io
 
 import datetime
 
@@ -125,7 +126,6 @@ import datetime
 # If switch to Ground Truth mode, automatically switch to the top-level dirname (e.g. m:\msa\annot)
 
 
-
 # LABEL_COLORMAP = imgviz.label_colormap(value=200)
 LABEL_COLORMAP = user_extns.get_colormap()
 
@@ -182,6 +182,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # -------------------------------        
         # Set Styles
         # - set button style to look like links
+        # TODO:  Use CSS Styles, not hardcoded styles
         # https://stackoverflow.com/questions/19161119/using-hover-and-pressed-stylesheet-qt
         export_button_style_sheet = 'QPushButton#exportData { border: 0px; text-decoration: underline; color: blue }'
         export_button_style_sheet += 'QPushButton#exportData:hover { font-weight: bold }'
@@ -217,6 +218,21 @@ class MainWindow(QtWidgets.QMainWindow):
         statsWidget = QtWidgets.QWidget()
         statsWidget.setLayout(statsDockLayout)
         self.stats_dock.setWidget(statsWidget)
+        
+        # Dock window - Automation
+        self.autom_dock = QtWidgets.QDockWidget(self.tr(u'Automation'), self)
+        self.autom_dock.setObjectName('AutomDock')
+        automDockLayout = QtWidgets.QVBoxLayout()
+        automDockLayout.setContentsMargins(0, 0, 0, 0)
+        automDockLayout.setSpacing(0)
+        self.btnGetFeatures = QtWidgets.QPushButton(self.tr(u'Get Features'))
+        self.btnGetFeatures.setObjectName('getFeatures')
+        self.btnGetFeatures.clicked.connect(self.getFeatures)   
+        #self.cursorPosition.setStyleSheet("font-weight: bold; color: red")
+        automDockLayout.addWidget(self.btnGetFeatures)
+        automWidget = QtWidgets.QWidget()
+        automWidget.setLayout(automDockLayout)
+        self.autom_dock.setWidget(automWidget)
         
         # Dock window - Label list
         self.labelList.itemSelectionChanged.connect(self.labelSelectionChanged)
@@ -262,15 +278,15 @@ class MainWindow(QtWidgets.QMainWindow):
         fileListCtrlsLayout.addWidget(self.showLabeledCheckbox)
         self.showLabeledCheckbox.stateChanged.connect(self.refreshDirImages)        
         
-        self.exportData = QtWidgets.QPushButton('Export')
-        self.exportData.setObjectName('exportData')
-        fileListCtrlsLayout.addWidget(self.exportData)
-        self.exportData.clicked.connect(self.exportDataToExcel)        
+        self.btnExportData = QtWidgets.QPushButton('Export')
+        self.btnExportData.setObjectName('exportData')
+        fileListCtrlsLayout.addWidget(self.btnExportData)
+        self.btnExportData.clicked.connect(self.exportDataToExcel)        
 
-        self.loadSelected = QtWidgets.QPushButton('Load Selected')
-        self.loadSelected.setObjectName('loadSelected')
-        fileListCtrlsLayout.addWidget(self.loadSelected)
-        self.loadSelected.clicked.connect(self.loadDataFromExcel)        
+        self.btnLoadSelected = QtWidgets.QPushButton('Load Selected')
+        self.btnLoadSelected.setObjectName('loadSelected')
+        fileListCtrlsLayout.addWidget(self.btnLoadSelected)
+        self.btnLoadSelected.clicked.connect(self.loadDataFromExcel)        
 
         fileListLayout.addLayout(fileListCtrlsLayout)
         
@@ -320,7 +336,7 @@ class MainWindow(QtWidgets.QMainWindow):
         #TODO Get from Config File
         self.groundTruthDirName = 'Ground Truth'
         self.groundTruthOpacity = 255
-        self.groundTruthOpacityOther = 50
+        self.groundTruthOpacityOther = 100
         #TODO Ensure groundTruthDirName exists
         
         annotatorListWidget = QtWidgets.QWidget()
@@ -369,6 +385,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.addDockWidget(Qt.RightDockWidgetArea, self.flag_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.stats_dock)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.autom_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.label_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.shape_dock)
         self.addDockWidget(Qt.RightDockWidgetArea, self.file_dock)
@@ -791,6 +808,7 @@ class MainWindow(QtWidgets.QMainWindow):
             (
                 self.flag_dock.toggleViewAction(),
                 self.stats_dock.toggleViewAction(),
+                self.autom_dock.toggleViewAction(),
                 self.label_dock.toggleViewAction(),
                 self.shape_dock.toggleViewAction(),
                 self.file_dock.toggleViewAction(),
@@ -935,10 +953,13 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.populateModeActions()
         
-        #Display mouse position every 100 ms
+        # Display mouse position every 100 ms
         self.mouse_timer = QtCore.QTimer()
         self.mouse_timer.timeout.connect(self.disp_mouse_pos)
         self.mouse_timer.start(100)
+        
+        # Settings for ML
+        self.ipm = user_extns.ImgPredMgr()
 
         # self.firstStart = True
         # if self.firstStart:
@@ -2303,3 +2324,16 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.showLabeledCheckbox.setChecked(True)
         self.importDirImages(self, self.lastOpenDir, all_images=img_list)
+
+
+    def getFeatures(self):
+        # self.image - QImage
+        # self.imageData - bytes
+        
+        # TODO Avoid conversions between different image formats.  Once read image using PIL, save that format (in loadFile?).
+        # Per https://stackoverflow.com/questions/14759637/python-pil-bytes-to-image
+        imageStream = io.BytesIO(self.imageData)
+        img = Image.open(imageStream)
+        
+        self.ipm.predict_imgs([img])
+                

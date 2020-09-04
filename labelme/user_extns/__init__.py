@@ -12,3 +12,4 @@ from .tools import getDesktop
 from .tools import get_colormap
 from .tools import AnnotDf
 from .tools import shape_dict_to_obj
+from .gcp_lib import ImgPredMgr
