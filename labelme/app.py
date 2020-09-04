@@ -2327,6 +2327,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
 
     def getFeatures(self):
+        if not self.imageData:
+            self.status('No image available to process')
+            return
         # self.image - QImage
         # self.imageData - bytes
         
@@ -2334,6 +2337,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # Per https://stackoverflow.com/questions/14759637/python-pil-bytes-to-image
         imageStream = io.BytesIO(self.imageData)
         img = Image.open(imageStream)
+
+        # TODO Get from config file
+        cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
+        ipm.set_cred(cred_path)
         
-        self.ipm.predict_imgs([img])
+        ipm.predict_imgs([img])
+        m_to_p = MaskToPolygon()
+        m_to_p.get_polygon(mask)
+        m_to_p.disp_imgs(img_resized)
+        
                 

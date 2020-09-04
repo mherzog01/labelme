@@ -9,11 +9,15 @@ import cv2
 import numpy as np
 from shapely.geometry import Polygon
 
+# For testing
+from labelme import user_extns
+from PIL import Image
+
 
 ##################################################
 # Shapely/docs/figures.py 
 # ------------------------------------------------
-from matplotlib import pyplot
+from matplotlib import pyplot as plt
 from shapely.geometry import Polygon
 
 from math import sqrt
@@ -83,44 +87,97 @@ def set_limits(ax, x0, xN, y0, yN):
     ax.set_aspect("equal")
 ##################################################
 
-### Get polygon.
 
-def get_polygon(in_img, pred_mask, disp_imgs=False):
-    kernel = np.ones((10,10),np.uint8)
-  
-    pred_mask_img = pred_mask.astype(np.uint8)
-    pred_closed = cv2.morphologyEx(pred_mask_img, cv2.MORPH_CLOSE, kernel)
-    pred_closed = cv2.morphologyEx(pred_closed, cv2.MORPH_OPEN, kernel)
-    # TODO Use hierarchy of Canny edges to get rid of interior edges:  https://stackoverflow.com/a/15867297/11262633
-    edges = cv2.Canny(pred_closed,0,1,L2gradient=True)
-  
-    if disp_imgs:
-      img_with_edges = add_overlay(in_img, edges)
-  
-    # Convert to polygon, and simplify
-    # https://docs.opencv.org/trunk/d4/d73/tutorial_py_contours_begin.html
-    contours, hierarchy = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-  
-    # Using cv2.RETR_EXTERNAL, take the first parent
-    # TODO If there is more than one parent, take largest area.  E.g. 20200211-151331-Img.bmp
-    contour_p = contours[0]
-  
-    if disp_imgs:
-      img = np.zeros(edges.shape)
-      img = cv2.drawContours(img,[contour_p],0,1,1)
-      print(set(img.ravel()))
-      display([img_with_edges, img])
-  
-    # Simplify
-    polygon = Polygon(contour_p[:,0])
-  
-    # TODO Set tolerance based on image size?
-    polygon_s = polygon.simplify(1.5)
-    if disp_imgs:
-      fig = pyplot.figure(1, figsize=SIZE, dpi=90)
-      ax = fig.add_subplot(121)
-      plot_coords(ax, polygon_s.exterior)
-      plt.show()
-      print(f'# points in polygon len={len(polygon_s.exterior.coords)}')
-  
-    return polygon
+
+
+
+
+#---------------------------
+# Get polygon
+#
+# Use a class to ca
+class MaskToPolygon():
+    def __init__(self):
+        self.kernel = np.ones((10,10),np.uint8)
+        
+    def get_polygon(self, pred_mask):
+      
+        self.pred_mask = pred_mask
+        
+        pred_mask_img = pred_mask.astype(np.uint8)
+        pred_closed = cv2.morphologyEx(pred_mask_img, cv2.MORPH_CLOSE, self.kernel)
+        pred_closed = cv2.morphologyEx(pred_closed, cv2.MORPH_OPEN, self.kernel)
+        # TODO Use hierarchy of Canny edges to get rid of interior edges:  https://stackoverflow.com/a/15867297/11262633
+        self.edges = cv2.Canny(pred_closed,0,1,L2gradient=True)
+      
+        # Convert to polygon, and simplify
+        # https://docs.opencv.org/trunk/d4/d73/tutorial_py_contours_begin.html
+        self.contours, self.hierarchy = cv2.findContours(self.edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+      
+        # Using cv2.RETR_EXTERNAL, take contour with the largest area.  E.g. 20200211-151331-Img.bmp
+        max_area = 0
+        self.polygon = None
+        for c in self.contours:
+            p = Polygon(c[:,0])
+            if p.area > max_area:
+                self.polygon = p
+                self.contour = c
+      
+        # Simplify
+        # TODO Set tolerance based on image size?
+        self.polygon_s = self.polygon.simplify(1.5)
+      
+        return self.polygon_s
+
+
+    def disp_imgs(self, in_img=None):
+
+        img_list = []
+        if not in_img is None:
+            # TODO Consolidate add_overlay and other utilities (also in gcp_lib.py)
+            img_with_edges = self.add_overlay(in_img, self.edges)
+            img_list.append(img_with_edges)
+
+        img = np.zeros(self.edges.shape)
+        img = cv2.drawContours(img,[self.contour],0,1,1)
+        print(set(img.ravel()))
+        img_list.append(img)
+        
+        display(img_list)        
+        
+        fig = plt.figure(1, figsize=SIZE, dpi=90)
+        ax = fig.add_subplot(121)
+        plot_coords(ax, self.polygon.exterior)
+        plt.show()
+        print(f'# points in polygon len={len(self.polygon_s.exterior.coords)}')
+
+
+    def add_overlay(self, in_img, overlay, color=(1,0,0)):
+      out_img = in_img.copy()
+      #print(f'Out img shape={out_img.shape}.  Overlay shape={overlay.shape}')
+      #print(f'Nonzero {overlay.nonzero()[:2]}')
+      out_img[overlay.nonzero()[:2]] = color    # Image is normalized
+      return out_img  
+    
+
+if __name__ == '__main__':
+
+    # TODO Move to Tests. Segregate user_extns tests from other tests.
+    img_path = r'c:\tmp\work1\20200211-151331-Img.bmp'
+    cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
+    
+    ipm = user_extns.ImgPredMgr()
+    ipm.set_cred(cred_path)
+    
+    img = Image.open(img_path)
+    ipm.predict_imgs([img])
+    for idx, m_np in enumerate(ipm.pred_masks_np):
+        print(idx, m_np.shape)
+        
+    for img_resized, mask in zip(ipm.resized_images, ipm.pred_masks_np):
+        overlay = ipm.add_overlay(img_resized, mask)
+        display([img_resized, mask, overlay])         
+
+    m_to_p = MaskToPolygon()
+    m_to_p.get_polygon(mask)
+    m_to_p.disp_imgs(img_resized)
