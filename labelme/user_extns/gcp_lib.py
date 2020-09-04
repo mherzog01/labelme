@@ -13,6 +13,8 @@ import googleapiclient.discovery
 
 from matplotlib import pyplot as plt
 
+from labelme.user_extns import img_ml_util
+
 
 
 class ImgPredMgr():
@@ -77,6 +79,8 @@ class ImgPredMgr():
             # https://stackoverflow.com/questions/20454332/precision-of-numpy-array-lost-after-tolist
             img_rounded = np.around(img_resized_np, 4)
             instances.append(img_rounded.tolist())
+
+******** Need to resize predictions to image *************
         
         # TODO Add logging and error handling
         self.predictions = self.predict_json(instances)
@@ -120,5 +124,5 @@ if __name__ == '__main__':
         print(idx, m_np.shape)
         
     for img_resized, mask in zip(ipm.resized_images, ipm.pred_masks_np):
-        overlay = add_overlay(img_resized, mask)
-        display([img_resized, mask, overlay])        
+        overlay = img_ml_util.add_overlay(img_resized, mask)
+        img_ml_util.display([img_resized, mask, overlay])        

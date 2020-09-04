@@ -5,7 +5,8 @@ Created on Fri Sep  4 14:52:56 2020
 @author: MHerzo
 """
 
-
+import numpy as np
+from matplotlib import pyplot as plt
     
     
 # Utility functions for displaying images/debugging process

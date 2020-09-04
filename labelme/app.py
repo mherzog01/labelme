@@ -2340,11 +2340,18 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # TODO Get from config file
         cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
+        ipm = self.ipm
         ipm.set_cred(cred_path)
         
         ipm.predict_imgs([img])
-        m_to_p = MaskToPolygon()
-        m_to_p.get_polygon(mask)
-        m_to_p.disp_imgs(img_resized)
+        m_to_p = user_extns.MaskToPolygon()
+        for mask in ipm.pred_masks_np:
+            pts = m_to_p.get_polygon(mask)
+            # TODO Get label from model output
+            s = Shape(label='Tissue Boundary',shape_type='polygon')
+            for pt in pts:
+                s.addPoint(QtCore.QPointF(*pt))
+            s.close()
+            self.addLabel(s)
         
                 

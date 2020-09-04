@@ -11,6 +11,7 @@ from shapely.geometry import Polygon
 
 # For testing
 from labelme import user_extns
+from labelme.user_extns import img_ml_util
 from PIL import Image
 
 
@@ -95,10 +96,12 @@ def set_limits(ax, x0, xN, y0, yN):
 #---------------------------
 # Get polygon
 #
-# Use a class to ca
+# Use a class to store intermediate data such as edges and contours
 class MaskToPolygon():
     def __init__(self):
         self.kernel = np.ones((10,10),np.uint8)
+        #self.simplification_limits = (1,2)
+        #self.simlification_len = 25  # Desired number of pixels between points of polygon
         
     def get_polygon(self, pred_mask):
       
@@ -124,10 +127,13 @@ class MaskToPolygon():
                 self.contour = c
       
         # Simplify
-        # TODO Set tolerance based on image size?
+        # TODO Set tolerance based on polygon length, with a min and max ratio
+        #polygon_len = self.polygon.length
+        #orig_num_pts = len(self.polygon.boundary.coords)
         self.polygon_s = self.polygon.simplify(1.5)
+        self.boundary_pts = self.polygon_s.boundary.coords
       
-        return self.polygon_s
+        return self.boundary_pts
 
 
     def disp_imgs(self, in_img=None):
@@ -135,7 +141,7 @@ class MaskToPolygon():
         img_list = []
         if not in_img is None:
             # TODO Consolidate add_overlay and other utilities (also in gcp_lib.py)
-            img_with_edges = self.add_overlay(in_img, self.edges)
+            img_with_edges = img_ml_util.add_overlay(in_img, self.edges)
             img_list.append(img_with_edges)
 
         img = np.zeros(self.edges.shape)
@@ -143,21 +149,19 @@ class MaskToPolygon():
         print(set(img.ravel()))
         img_list.append(img)
         
-        display(img_list)        
+        img_ml_util.display(img_list)        
         
         fig = plt.figure(1, figsize=SIZE, dpi=90)
         ax = fig.add_subplot(121)
-        plot_coords(ax, self.polygon.exterior)
+        plot_coords(ax, self.polygon.boundary.coords)
         plt.show()
-        print(f'# points in polygon len={len(self.polygon_s.exterior.coords)}')
+        print(f'# points in original polygon len={len(self.polygon.boundary.coords)}')
 
-
-    def add_overlay(self, in_img, overlay, color=(1,0,0)):
-      out_img = in_img.copy()
-      #print(f'Out img shape={out_img.shape}.  Overlay shape={overlay.shape}')
-      #print(f'Nonzero {overlay.nonzero()[:2]}')
-      out_img[overlay.nonzero()[:2]] = color    # Image is normalized
-      return out_img  
+        fig = plt.figure(1, figsize=SIZE, dpi=90)
+        ax = fig.add_subplot(121)
+        plot_coords(ax, self.boundary_pts)
+        plt.show()
+        print(f'# points in final polygon len={len(self.boundary_pts)}')
     
 
 if __name__ == '__main__':
@@ -175,8 +179,8 @@ if __name__ == '__main__':
         print(idx, m_np.shape)
         
     for img_resized, mask in zip(ipm.resized_images, ipm.pred_masks_np):
-        overlay = ipm.add_overlay(img_resized, mask)
-        display([img_resized, mask, overlay])         
+        overlay = img_ml_util.add_overlay(img_resized, mask)
+        img_ml_util.display([img_resized, mask, overlay])         
 
     m_to_p = MaskToPolygon()
     m_to_p.get_polygon(mask)
