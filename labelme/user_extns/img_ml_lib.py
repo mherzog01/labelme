@@ -19,7 +19,6 @@ from PIL import Image
 # Shapely/docs/figures.py 
 # ------------------------------------------------
 from matplotlib import pyplot as plt
-from shapely.geometry import Polygon
 
 from math import sqrt
 from shapely import affinity
@@ -98,13 +97,18 @@ def set_limits(ax, x0, xN, y0, yN):
 #
 # Use a class to store intermediate data such as edges and contours
 class MaskToPolygon():
-    def __init__(self):
+    def __init__(self, targ_size : (int,int) = None):
+        self.targ_size=targ_size
         self.kernel = np.ones((10,10),np.uint8)
         #self.simplification_limits = (1,2)
         #self.simlification_len = 25  # Desired number of pixels between points of polygon
         
-    def get_polygon(self, pred_mask):
+    def get_polygon(self, pred_mask, scale_points=True):
       
+        if scale_points and self.targ_size is None:
+            print('ERROR:  point scaling was requested but no target size was provided')
+            raise ValueError
+            
         self.pred_mask = pred_mask
         
         pred_mask_img = pred_mask.astype(np.uint8)
@@ -131,8 +135,16 @@ class MaskToPolygon():
         #polygon_len = self.polygon.length
         #orig_num_pts = len(self.polygon.boundary.coords)
         self.polygon_s = self.polygon.simplify(1.5)
-        self.boundary_pts = self.polygon_s.boundary.coords
       
+        if scale_points:
+            scale_x = self.targ_size[0] / pred_mask.shape[0]
+            scale_y = self.targ_size[1] / pred_mask.shape[1]
+            self.scale_factor = (scale_x, scale_y)
+            self.polygon_s = affinity.scale(self.polygon_s, xfact=scale_x, yfact=scale_y, origin=(0,0))
+            #TODO Scale self.polygon and self.contour?
+
+        self.boundary_pts = self.polygon_s.boundary.coords
+
         return self.boundary_pts
 
 
@@ -183,5 +195,9 @@ if __name__ == '__main__':
         img_ml_util.display([img_resized, mask, overlay])         
 
     m_to_p = MaskToPolygon()
+    m_to_p.get_polygon(mask, scale_points=False)
+    m_to_p.disp_imgs(img_resized)
+
+    m_to_p.targ_size = img.size
     m_to_p.get_polygon(mask)
     m_to_p.disp_imgs(img_resized)

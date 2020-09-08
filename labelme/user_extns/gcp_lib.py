@@ -64,6 +64,7 @@ class ImgPredMgr():
     def predict_imgs(self, img_list):
         instances = []
         self.resized_images = []
+        self.predictions = []
         for img in img_list:
             
             img_resized = img.resize(self.model_img_size, Image.ANTIALIAS)        
@@ -79,8 +80,6 @@ class ImgPredMgr():
             # https://stackoverflow.com/questions/20454332/precision-of-numpy-array-lost-after-tolist
             img_rounded = np.around(img_resized_np, 4)
             instances.append(img_rounded.tolist())
-
-******** Need to resize predictions to image *************
         
         # TODO Add logging and error handling
         self.predictions = self.predict_json(instances)
