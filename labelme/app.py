@@ -686,6 +686,15 @@ class MainWindow(QtWidgets.QMainWindow):
             enabled=True,
         )
         fill_drawing.trigger()
+        
+        showShapeVertices = action(
+            text='Show Shape Vertices',
+            slot=self.toggleShowShapeVertices,
+            enabled=True,
+            checkable=True
+        )
+        showShapeVertices.setChecked(True)
+        
 
         # Label list context menu.
         labelMenu = QtWidgets.QMenu()
@@ -767,6 +776,7 @@ class MainWindow(QtWidgets.QMainWindow):
             launchExternalViewer=launchExternalViewer,
             exportByLot=exportByLot,
             groundTruthBuilderMode=groundTruthBuilderMode,
+            showShapeVertices=showShapeVertices,
         )
 
         self.canvas.edgeSelected.connect(self.canvasShapeEdgeSelected)
@@ -825,6 +835,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 fitWindow,
                 fitWidth,
                 None,
+                showShapeVertices,
             ),
         )
         utils.addActions(
@@ -966,6 +977,23 @@ class MainWindow(QtWidgets.QMainWindow):
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
         logger.debug(f'Initialization complete')
+        
+    def toggleShowShapeVertices(self):
+        if not hasattr(self, 'canvas'):
+            return
+        if not hasattr(self,'origShapeVertexSize'):
+            self.origShapeVertexSize = Shape.point_size
+        if self.showShapeVertices:
+            Shape.point_size = self.origShapeVertexSize
+        else:            
+            Shape.point_size = 1
+        self.canvas.repaint()
+
+    @property
+    def showShapeVertices(self):
+        return self.actions.showShapeVertices.isChecked()
+
+
         
     def disp_mouse_pos(self):
         pos_desc = 'n/a'
