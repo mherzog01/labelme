@@ -2326,7 +2326,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status(f'Read {num_images} images, {len(df_selected)} defects.', print_msg=True)
         
         self.showLabeledCheckbox.setChecked(True)
-        self.importDirImages(self, self.lastOpenDir, all_images=img_list)
+        self.importDirImages(self.lastOpenDir, all_images=img_list)
 
 
     def getFeatures(self):
