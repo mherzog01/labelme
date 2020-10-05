@@ -80,7 +80,7 @@ import datetime
 #31.  If zoom into 9% or less, can't zoom out with mouse or Zoom tool.
 #32.  In info, Display who modified a .json and the mod date
 #33.  In info, make possible to copy/paste data
-
+#34.  If a point overlaps with another shape, when select to delete, will not delete
 
 # FIXME
 # - [medium] Set max zoom value to something big enough for FitWidth/Window
@@ -686,6 +686,15 @@ class MainWindow(QtWidgets.QMainWindow):
             enabled=True,
         )
         fill_drawing.trigger()
+        
+        showShapeVertices = action(
+            text='Show Shape Vertices',
+            slot=self.toggleShowShapeVertices,
+            enabled=True,
+            checkable=True
+        )
+        showShapeVertices.setChecked(True)
+        
 
         # Label list context menu.
         labelMenu = QtWidgets.QMenu()
@@ -767,6 +776,7 @@ class MainWindow(QtWidgets.QMainWindow):
             launchExternalViewer=launchExternalViewer,
             exportByLot=exportByLot,
             groundTruthBuilderMode=groundTruthBuilderMode,
+            showShapeVertices=showShapeVertices,
         )
 
         self.canvas.edgeSelected.connect(self.canvasShapeEdgeSelected)
@@ -825,6 +835,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 fitWindow,
                 fitWidth,
                 None,
+                showShapeVertices,
             ),
         )
         utils.addActions(
@@ -874,8 +885,9 @@ class MainWindow(QtWidgets.QMainWindow):
             fitWidth,
         )
 
-        self.statusBar().showMessage(self.tr('%s started.') % __appname__)
+        #self.statusBar().showMessage(self.tr('%s started.') % __appname__)
         self.statusBar().show()
+        self.status(self.tr('%s started.') % __appname__, delay=0)
 
         if output_file is not None and self._config['auto_save']:
             logger.warn(
@@ -965,6 +977,23 @@ class MainWindow(QtWidgets.QMainWindow):
         # if self.firstStart:
         #    QWhatsThis.enterWhatsThisMode()
         logger.debug(f'Initialization complete')
+        
+    def toggleShowShapeVertices(self):
+        if not hasattr(self, 'canvas'):
+            return
+        if not hasattr(self,'origShapeVertexSize'):
+            self.origShapeVertexSize = Shape.point_size
+        if self.showShapeVertices:
+            Shape.point_size = self.origShapeVertexSize
+        else:            
+            Shape.point_size = 1
+        self.canvas.repaint()
+
+    @property
+    def showShapeVertices(self):
+        return self.actions.showShapeVertices.isChecked()
+
+
         
     def disp_mouse_pos(self):
         pos_desc = 'n/a'
@@ -1078,10 +1107,15 @@ class MainWindow(QtWidgets.QMainWindow):
     def queueEvent(self, function):
         QtCore.QTimer.singleShot(0, function)
 
-    def status(self, message, delay=5000, print_msg=False):
-        self.statusBar().showMessage(message, delay)
+    def status(self, message, delay=5000, print_msg=False, show_time=False):
+        if show_time:
+            msg = f'{datetime.datetime.now():%Y%m%d %H:%M:%S}: {message}'
+        else:
+            msg = message
+        self.statusBar().showMessage(msg, delay)
         if print_msg:
-            print(message)
+            print(msg)
+        QtWidgets.QApplication.processEvents()        
 
     def resetState(self):
         self.labelList.clear()
@@ -1439,6 +1473,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 shape.addPoint(QtCore.QPointF(x, y))
             shape.close()
 
+            # TODO Code duplicated with getFeatures()
             default_flags = {}
             if self._config['label_flags']:
                 for pattern, keys in self._config['label_flags'].items():
@@ -1942,10 +1977,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.output_dir = output_dir
 
-        self.statusBar().showMessage(
-            self.tr('%s . Annotations will be saved/loaded in %s') %
-            ('Change Annotations Dir', self.output_dir))
-        self.statusBar().show()
+        msg = self.tr('%s . Annotations will be saved/loaded in %s') % \
+            ('Change Annotations Dir', self.output_dir)
+        self.status(msg, delay=0)
 
         current_filename = self.filename
         self.importDirImages(self.lastOpenDir, load=False)
@@ -2226,8 +2260,7 @@ class MainWindow(QtWidgets.QMainWindow):
         targ_dir_and_prefix = user_extns.inputdialog(msg=r'Target folder ',default_value=targ_dir_and_prefix).value
         if not targ_dir_and_prefix:
             msg = 'No images exported'
-            self.status(msg)
-            print(msg)
+            self.status(msg, print_msg=True)
             return
         labels_to_export = set([shape['label'] for shape in self.labelFile.shapes])
         print(f'labels_to_export={labels_to_export}')
@@ -2266,8 +2299,7 @@ class MainWindow(QtWidgets.QMainWindow):
             img_tmp = img_tmp.convert("L")
             img_tmp.save(targ_file)    
         msg = 'Image export complete'
-        self.status(msg)
-        print(msg)
+        self.status(msg, print_msg=True)
             
     def exportByLot(self):
         user_extns.exportByLot()
@@ -2294,7 +2326,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         def stat_callback(msg):
             self.status(msg, print_msg=True)
-            QtWidgets.QApplication.processEvents()
             
             
         df_annot = user_extns.getAnnotDf(self.imageList, stat_callback)
@@ -2323,17 +2354,53 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status(f'Read {num_images} images, {len(df_selected)} defects.', print_msg=True)
         
         self.showLabeledCheckbox.setChecked(True)
-        self.importDirImages(self, self.lastOpenDir, all_images=img_list)
+        self.importDirImages(self.lastOpenDir, all_images=img_list)
 
 
     def getFeatures(self):
+        if not self.imageData:
+            self.status('No image available to process')
+            return
         # self.image - QImage
         # self.imageData - bytes
         
+        self.status('Getting features')
         # TODO Avoid conversions between different image formats.  Once read image using PIL, save that format (in loadFile?).
         # Per https://stackoverflow.com/questions/14759637/python-pil-bytes-to-image
         imageStream = io.BytesIO(self.imageData)
         img = Image.open(imageStream)
+
+        # TODO Get from config file
+        cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
+        ipm = self.ipm
+        ipm.set_cred(cred_path)
         
-        self.ipm.predict_imgs([img])
+        self.status('Getting features', show_time=True, print_msg=True)
+        ipm.predict_imgs([img])
+        m_to_p = user_extns.MaskToPolygon(targ_size = img.size)
+        num_found = 0
+        for mask in ipm.pred_masks_np:
+            pts = m_to_p.get_polygon(mask)
+            # TODO Get label from model output
+            label = 'Tissue Boundary'
+            s = Shape(label=label,shape_type='polygon')
+            for pt in pts:
+                s.addPoint(QtCore.QPointF(*pt))
+            s.close()
+            self.addLabel(s)
+
+            #TODO Combine with code from loadLabels
+            default_flags = {}
+            if self._config['label_flags']:
+                for pattern, keys in self._config['label_flags'].items():
+                    if re.match(pattern, label):
+                        for key in keys:
+                            default_flags[key] = False
+            s.flags = default_flags            
+            self.canvas.shapes.append(s)
+            num_found += 1
+        if num_found > 0:
+            self.setDirty()
+        self.status(f'Found {num_found} feature(s).', show_time=True, print_msg=True)
+        
                 
