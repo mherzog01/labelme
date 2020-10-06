@@ -2326,6 +2326,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         def stat_callback(msg):
             self.status(msg, print_msg=True)
+            QtWidgets.QApplication.processEvents()
             
             
         df_annot = user_extns.getAnnotDf(self.imageList, stat_callback)

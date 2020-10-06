@@ -112,9 +112,11 @@ if __name__ == '__main__':
 
     # TODO Move to Tests. Segregate user_extns tests from other tests.
     img_path = r'c:\tmp\work1\20200211-151331-Img.bmp'
-    cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
     
     ipm = ImgPredMgr()
+    cred_path = ipm.GOOGLE_APPLICATION_CREDENTIALS
+    if not os.path.exists(cred_path):
+        cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
     ipm.set_cred(cred_path)
     
     img = Image.open(img_path)
