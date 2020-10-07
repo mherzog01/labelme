@@ -972,6 +972,10 @@ class MainWindow(QtWidgets.QMainWindow):
         
         # Settings for ML
         self.ipm = user_extns.ImgPredMgr()
+        if not self.ipm.cred_set:
+            # TODO Get from config file
+            cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
+            self.ipm.set_cred(cred_path)
 
         # self.firstStart = True
         # if self.firstStart:
@@ -2371,11 +2375,7 @@ class MainWindow(QtWidgets.QMainWindow):
         imageStream = io.BytesIO(self.imageData)
         img = Image.open(imageStream)
 
-        # TODO Get from config file
         ipm = self.ipm
-        if not ipm.cred_set:
-            cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
-            ipm.set_cred(cred_path)
         
         self.status('Getting features', show_time=True, print_msg=True)
         ipm.predict_imgs([img])

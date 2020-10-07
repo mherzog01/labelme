@@ -127,6 +127,7 @@ class MaskToPolygon():
         for c in self.contours:
             p = Polygon(c[:,0])
             if p.area > max_area:
+                max_area = p.area
                 self.polygon = p
                 self.contour = c
       
