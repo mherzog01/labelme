@@ -43,14 +43,14 @@ class ImgPredMgr():
         model=self.MODEL
         version=self.MODEL_VERSION
         
-        service = googleapiclient.discovery.build('ml', 'v1')
-        name = 'projects/{}/models/{}'.format(project, model)
+        self.service = googleapiclient.discovery.build('ml', 'v1')
+        self.model_version_string = 'projects/{}/models/{}'.format(project, model)
     
         if version is not None:
-            name += '/versions/{}'.format(version)
+            self.model_version_string += '/versions/{}'.format(version)
     
-        response = service.projects().predict(
-            name=name,
+        response = self.service.projects().predict(
+            name=self.model_version_string,
             body={'instances': instances}
         ).execute()
     
@@ -96,7 +96,8 @@ class ImgPredMgr():
     def pred_masks(self):
         pred_mask_list = []
         for p in self.predictions:
-            pred_mask = np.array(p['conv2d_transpose_9'])
+            #TODO Change to conv2d_transpose_output
+            pred_mask = np.array(p['conv2d_transpose_4'])
             pred_mask_list.append(pred_mask)
         return pred_mask_list
 
