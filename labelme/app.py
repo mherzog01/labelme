@@ -2372,9 +2372,10 @@ class MainWindow(QtWidgets.QMainWindow):
         img = Image.open(imageStream)
 
         # TODO Get from config file
-        cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
         ipm = self.ipm
-        ipm.set_cred(cred_path)
+        if not ipm.cred_set:
+            cred_path = r'c:\tmp\work1\Tissue Defect UI-ML Svc Acct.json'
+            ipm.set_cred(cred_path)
         
         self.status('Getting features', show_time=True, print_msg=True)
         ipm.predict_imgs([img])

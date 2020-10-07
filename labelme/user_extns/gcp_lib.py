@@ -27,13 +27,16 @@ class ImgPredMgr():
         self.MODEL_VERSION = None
         self.model_img_size = (224,224)
         self.GOOGLE_APPLICATION_CREDENTIALS = r'm:\msa\cfg\cred\Tissue Defect UI-ML Svc Acct.json'
+        self.cred_set = False
         
         self.set_cred()
         
     def set_cred(self, cred_path=None):
         if cred_path is None:
             cred_path = self.GOOGLE_APPLICATION_CREDENTIALS
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = cred_path
+        if os.path.exists(cred_path):
+            os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = cred_path
+            self.cred_set = True
 
     
     # TODO Add logging and error handling - status messages
