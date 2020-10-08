@@ -92,7 +92,7 @@ def pixmap2np(pixmap):
 #------------------------------------------
 # Settings
 run_mode = ['DEV','PROD'][1]
-as_of_date = datetime.datetime.strptime('8/28/2020', '%m/%d/%Y')  # As of date - process only changes on or after this date
+as_of_date = datetime.datetime.strptime('10/08/2020', '%m/%d/%Y')  # As of date - process only changes on or after this date
 create_img_masks = ['all','new','none'][0]  
 label_of_interest = 'Tissue boundary'
 
@@ -114,11 +114,11 @@ num_to_disp = 0   # Set to 0 or less to disable
 # Needed to paint shapes
 app = QtWidgets.QApplication(sys.argv)
     
-dnm = DirNameMgr(label_dir, export_root=export_root)
-if not osp.exists(export_root):
-    os.mkdir(export_root)
+dnm = DirNameMgr(label_dir, export_root=export_folder_path)
+#if not osp.exists(export_root):
+#    os.mkdir(export_root)
 if not osp.exists(dnm.export_img_mask_dir):
-    os.mkdir(dnm.export_img_mask_dir)
+    os.makedirs(dnm.export_img_mask_dir)
 
 if create_img_masks != 'none':
     if not osp.exists(classes_file_path):

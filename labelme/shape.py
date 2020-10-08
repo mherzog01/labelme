@@ -100,6 +100,12 @@ class Shape(object):
         self.points.insert(i, point)
 
     def removePoint(self, i):
+        if i is None:
+            print(f'ERROR (removePoint):   No point index specified.  Shape label={self.label}, group ID={self.group_id}, type={self.shape_type}, flags={self.flags}, # points={len(self.points)}')
+            return
+        if i >= len(self.points):
+            print(f'ERROR (removePoint):   Point index {i} out of range.  Shape label={self.label}, group ID={self.group_id}, type={self.shape_type}, flags={self.flags}, # points={len(self.points)}')
+            return
         self.points.pop(i)
 
     def isClosed(self):

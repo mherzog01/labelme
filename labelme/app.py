@@ -2384,8 +2384,8 @@ class MainWindow(QtWidgets.QMainWindow):
         num_found = 0
         for mask in ipm.pred_masks_np:
             pts = m_to_p.get_polygon(mask)
-            # TODO Get label from model output
-            label = 'Tissue Boundary'
+            # TODO Get label from model output/config files(s)
+            label = 'Tissue boundary'
             s = Shape(label=label,shape_type='polygon')
             for pt in pts:
                 s.addPoint(QtCore.QPointF(*pt))
