@@ -99,8 +99,7 @@ class ImgPredMgr():
     def pred_masks(self):
         pred_mask_list = []
         for p in self.predictions:
-            #TODO Change to conv2d_transpose_output
-            pred_mask = np.array(p['conv2d_transpose_4'])
+            pred_mask = np.array(p['conv2d_transpose_output'])
             pred_mask_list.append(pred_mask)
         return pred_mask_list
 

@@ -2379,6 +2379,7 @@ class MainWindow(QtWidgets.QMainWindow):
         
         self.status('Getting features', show_time=True, print_msg=True)
         ipm.predict_imgs([img])
+        self.status('Processing features', show_time=True, print_msg=True)
         m_to_p = user_extns.MaskToPolygon(targ_size = img.size)
         num_found = 0
         for mask in ipm.pred_masks_np:
