@@ -2400,9 +2400,11 @@ class MainWindow(QtWidgets.QMainWindow):
                             default_flags[key] = False
             s.flags = default_flags            
             self.canvas.shapes.append(s)
+            self.canvas.setShapeVisible(s,True)
             num_found += 1
         if num_found > 0:
+            self.canvas.storeShapes()
             self.setDirty()
-        self.status(f'Found {num_found} feature(s).', show_time=True, print_msg=True)
+        self.status(f'Found {num_found} feature(s)', show_time=True, print_msg=True)
         
                 

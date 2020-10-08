@@ -46,7 +46,7 @@ class ImgPredMgr():
         model=self.MODEL
         version=self.MODEL_VERSION
         
-        self.service = googleapiclient.discovery.build('ml', 'v1')
+        self.service = googleapiclient.discovery.build('ml', 'v1', cache_discovery=False, )
         self.model_version_string = 'projects/{}/models/{}'.format(project, model)
     
         if version is not None:
